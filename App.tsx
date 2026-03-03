@@ -1,20 +1,26 @@
 import { StatusBar } from 'expo-status-bar';
-import { StyleSheet, Text, View } from 'react-native';
+import * as Sentry from '@sentry/react-native';
+import { NativeWindStyleSheet } from 'nativewind';
+import HomePage from './src/app/Home/HomePage';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
+
+if (NativeWindStyleSheet?.setOutput) {
+  NativeWindStyleSheet.setOutput({ default: 'native' });
+}
+
+const sentryDsn = process.env.EXPO_PUBLIC_SENTRY_DSN;
+if (sentryDsn) {
+  Sentry.init({
+    dsn: sentryDsn,
+    enableNative: true,
+  });
+}
 
 export default function App() {
   return (
-    <View style={styles.container}>
-      <Text>Open up App.tsx to start working on your app!</Text>
-      <StatusBar style="auto" />
-    </View>
+    <SafeAreaProvider>
+      <HomePage />
+      <StatusBar style="dark" />
+    </SafeAreaProvider>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#fff',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-});
