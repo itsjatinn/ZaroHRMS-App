@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { Image, Pressable, Text, View } from 'react-native';
 import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
-import Logo from '../../../assets/logo_big.svg';
 
 type SidebarProps = {
   onClose?: () => void;
@@ -31,7 +30,7 @@ export default function Sidebar({ onClose }: SidebarProps) {
           <View className="h-24 w-24 overflow-hidden rounded-full">
             <Image
               source={require('../../../assets/pexels-rdne-7580937.jpg')}
-              className="h-28 w-24 translate-y-0.2"
+              className="h-28 w-24"
               resizeMode="cover"
               accessibilityLabel="Employee portrait"
             />
