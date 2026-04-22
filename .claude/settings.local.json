@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(timeout 45 npx expo export --platform ios --output-dir /tmp/zaro-export-test)",
+      "Bash(npx expo *)",
+      "Bash(git mv *)"
+    ]
+  }
+}

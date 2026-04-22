@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "phlebotomist-app",
-    "slug": "phlebotomist-app",
+    "name": "ZaroHR",
+    "slug": "zarohr",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -13,11 +13,11 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "bundleIdentifier": "com.phlebotomist.app",
+      "bundleIdentifier": "com.zarohr.app",
       "supportsTablet": true
     },
     "android": {
-      "package": "com.phlebotomist.app",
+      "package": "com.zarohr.app",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
@@ -30,7 +30,14 @@
     },
     "plugins": [
       "expo-secure-store",
-      "@sentry/react-native"
+      "@sentry/react-native",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "ZaroHR needs access to your photos to update your profile picture.",
+          "cameraPermission": "ZaroHR needs access to your camera to take a new profile picture."
+        }
+      ]
     ]
   }
 }
