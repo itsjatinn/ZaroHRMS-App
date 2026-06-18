@@ -1,4 +1,5 @@
-import { StatusBar } from 'expo-status-bar';
+import '../global.css';
+
 import * as Sentry from '@sentry/react-native';
 import {
   PlusJakartaSans_400Regular,
@@ -7,10 +8,11 @@ import {
   PlusJakartaSans_700Bold,
   useFonts,
 } from '@expo-google-fonts/plus-jakarta-sans';
+import { Stack } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
 import { Text, TextInput, View } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-
-import HomePage from './src/app/employee/HomePage';
 
 const sentryDsn = process.env.EXPO_PUBLIC_SENTRY_DSN;
 if (sentryDsn) {
@@ -48,7 +50,7 @@ textInputDefaults.defaultProps = {
   ],
 };
 
-export default function App() {
+export default function RootLayout() {
   const [fontsLoaded] = useFonts({
     PlusJakartaSans_400Regular,
     PlusJakartaSans_500Medium,
@@ -57,13 +59,15 @@ export default function App() {
   });
 
   if (!fontsLoaded) {
-    return <View className="flex-1 bg-[#f7f9fb]" />;
+    return <View className="flex-1 bg-cream" />;
   }
 
   return (
-    <SafeAreaProvider>
-      <HomePage />
-      <StatusBar style="dark" />
-    </SafeAreaProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <SafeAreaProvider>
+        <Stack screenOptions={{ headerShown: false }} />
+        <StatusBar style="dark" />
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
   );
 }

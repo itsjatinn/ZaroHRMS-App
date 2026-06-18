@@ -3,6 +3,7 @@
     "name": "ZaroHR",
     "slug": "zarohr",
     "version": "1.0.0",
+    "scheme": "zarohrm",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -37,7 +38,8 @@
           "photosPermission": "ZaroHR needs access to your photos to update your profile picture.",
           "cameraPermission": "ZaroHR needs access to your camera to take a new profile picture."
         }
-      ]
+      ],
+      "expo-router"
     ]
   }
 }
