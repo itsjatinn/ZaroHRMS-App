@@ -19,6 +19,7 @@
     },
     "android": {
       "package": "com.zarohr.app",
+      "softwareKeyboardLayoutMode": "resize",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
@@ -31,7 +32,6 @@
     },
     "plugins": [
       "expo-secure-store",
-      "@sentry/react-native",
       [
         "expo-image-picker",
         {
@@ -39,7 +39,8 @@
           "cameraPermission": "ZaroHR needs access to your camera to take a new profile picture."
         }
       ],
-      "expo-router"
+      "expo-router",
+      "expo-font"
     ]
   }
 }

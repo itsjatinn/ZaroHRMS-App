@@ -7,6 +7,7 @@ import { usePathname, useRouter } from 'expo-router';
 import type { ReactNode } from 'react';
 import { Image, Pressable, Text, View } from 'react-native';
 
+import { useAuth } from '../auth/AuthContext';
 import { currentUser } from '../data/currentUser';
 
 const YELLOW = '#F5D14E';
@@ -19,11 +20,6 @@ type MenuItem = {
 };
 
 const MENU: MenuItem[] = [
-  {
-    label: 'Documents',
-    route: '/documents',
-    icon: (c) => <Feather name="file-text" size={20} color={c} />,
-  },
   {
     label: 'Holidays',
     route: '/holidays',
@@ -54,12 +50,13 @@ const MENU: MenuItem[] = [
 export default function DrawerContent(props: DrawerContentComponentProps) {
   const router = useRouter();
   const pathname = usePathname();
+  const { signOut } = useAuth();
 
   return (
     <DrawerContentScrollView
       {...props}
       style={{ backgroundColor: NAVY }}
-      contentContainerStyle={{ flexGrow: 1, paddingTop: 28, paddingBottom: 28 }}
+      contentContainerStyle={{ flexGrow: 1, paddingTop: 80, paddingBottom: 40 }}
     >
       <View className="flex-1 px-5">
         {/* Top section: profile + menu */}
@@ -90,7 +87,13 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
             </View>
 
             {/* View profile link */}
-            <Pressable className="mt-4 flex-row items-center gap-1">
+            <Pressable
+              onPress={() => {
+                props.navigation.closeDrawer();
+                router.push('/view-profile');
+              }}
+              className="mt-4 flex-row items-center gap-1"
+            >
               <Text className="text-xs font-semibold uppercase tracking-wide text-[#F5D14E] underline">
                 View profile
               </Text>
@@ -114,7 +117,7 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
                     router.push(item.route);
                   }}
                   className={`flex-row items-center gap-4 rounded-2xl px-4 py-3.5 ${
-                    isActive ? 'bg-[#F5D14E]' : ''
+                    isActive ? 'bg-[#F5D14E]' : 'active:bg-white/10'
                   }`}
                 >
                   {item.icon(tint)}
@@ -140,7 +143,10 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
         {/* Bottom section: Sign out (pinned lower) */}
         <View>
           <View className="mb-4 h-px bg-white/10" />
-          <Pressable className="flex-row items-center gap-4 rounded-2xl px-4 py-3.5">
+          <Pressable
+            onPress={() => void signOut()}
+            className="mb-2 flex-row items-center gap-4 rounded-2xl px-4 py-3.5 active:bg-white/10"
+          >
             <Feather name="log-out" size={20} color="#FFFFFF" />
             <Text className="text-base text-white">Sign out</Text>
           </Pressable>

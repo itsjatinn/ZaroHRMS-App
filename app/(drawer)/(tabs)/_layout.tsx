@@ -20,13 +20,27 @@ function AnimatedScene({ children }: { children: ReactNode }) {
   const sceneStyle = useAnimatedStyle(() => ({
     flex: 1,
     overflow: 'hidden',
-    transform: [{ scale: interpolate(progress.value, [0, 1], [1, 0.92]) }],
+    transform: [{ scale: interpolate(progress.value, [0, 1], [1, 0.8]) }],
     borderRadius: interpolate(progress.value, [0, 1], [0, 40]),
+  }));
+
+  // Dims the home screen as the drawer opens (0 = closed, 1 = open).
+  const dimStyle = useAnimatedStyle(() => ({
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: '#000000',
+    opacity: interpolate(progress.value, [0, 1], [0, 0.45]),
   }));
 
   return (
     <View style={{ flex: 1, backgroundColor: '#14323F' }}>
-      <Animated.View style={sceneStyle}>{children}</Animated.View>
+      <Animated.View style={sceneStyle}>
+        {children}
+        <Animated.View pointerEvents="none" style={dimStyle} />
+      </Animated.View>
     </View>
   );
 }
@@ -36,13 +50,14 @@ function TabIcon({ focused, children }: { focused: boolean; children: ReactNode 
   return (
     <View
       style={{
-        width: 48,
-        height: 36,
+        width: 46,
+        height: 42,
         alignItems: 'center',
         justifyContent: 'center',
-        borderRadius: 12,
-        borderWidth: focused ? 1 : 0,
+        borderRadius: 14,
+        borderWidth: focused ? 1.5 : 0,
         borderColor: focused ? ACTIVE : 'transparent',
+        backgroundColor: focused ? 'rgba(245, 209, 78, 0.05)' : 'transparent',
       }}
     >
       {children}
@@ -58,18 +73,27 @@ export default function TabsLayout() {
       <Tabs
         screenOptions={{
           headerShown: false,
+          animation: 'shift',
         tabBarActiveTintColor: ACTIVE,
         tabBarInactiveTintColor: INACTIVE,
         tabBarStyle: {
-          backgroundColor: '#16202E',
+          position: 'absolute',
+          backgroundColor: '#14323F',
           borderTopWidth: 0,
-          height: 68 + insets.bottom,
-          paddingTop: 8,
-          paddingBottom: insets.bottom + 8,
+          borderTopLeftRadius: 28,
+          borderTopRightRadius: 28,
+          height: 80 + insets.bottom,
+          paddingTop: 14,
+          paddingBottom: insets.bottom + 12,
+          overflow: 'hidden',
+        },
+        tabBarItemStyle: {
+          paddingTop: 2,
         },
         tabBarLabelStyle: {
-          fontSize: 11,
+          fontSize: 12,
           fontWeight: '600',
+          marginTop: 8,
         },
       }}
     >

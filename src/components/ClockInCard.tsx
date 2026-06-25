@@ -1,61 +1,90 @@
-import { Feather } from '@expo/vector-icons';
-import { useState } from 'react';
+import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
+import { useEffect, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 
 import { cardShadow } from './shadow';
 
+const YELLOW = '#F5D14E';
+const NAVY = '#14323F';
+
+function pad(n: number) {
+  return n.toString().padStart(2, '0');
+}
+
 export default function ClockInCard() {
-  // true = currently checked in (default), false = checked out
-  const [isCheckedIn, setIsCheckedIn] = useState(true);
+  // false = not punched in yet (default), true = punched in
+  const [isPunchedIn, setIsPunchedIn] = useState(false);
+  const [now, setNow] = useState(new Date());
+
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  const weekday = now.toLocaleDateString('en-US', { weekday: 'long' });
+  const month = now.toLocaleDateString('en-US', { month: 'long' });
+  const dateStr = `${weekday} ${now.getDate()} ${month}`.toUpperCase();
+  const time = `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
 
   return (
-    <View style={cardShadow} className="rounded-3xl bg-[#16202E] p-6">
-      {/* Top row: status pill + location */}
-      <View className="flex-row items-center justify-between">
-        <View className="flex-row items-center gap-2 rounded-full bg-white/10 px-3 py-1.5">
-          <View className="h-2 w-2 rounded-full bg-[#F5D14E]" />
-          <Text className="text-xs font-semibold text-white">Clocked in</Text>
-        </View>
-        <Text className="text-xs text-white/40">Office · 3F Workbay</Text>
-      </View>
-
-      {/* Timer */}
-      <View className="mt-5 flex-row items-baseline">
-        <Text className="text-6xl font-bold tracking-tight text-white">04:23</Text>
-        <Text className="ml-1 text-2xl font-semibold text-white/50">:41</Text>
-      </View>
-      <Text className="mt-1 text-sm text-white/40">worked today</Text>
-
-      {/* Progress bar (~55%) */}
-      <View className="mt-5 h-2 w-full rounded-full bg-white/10">
-        <View className="h-2 w-[55%] rounded-full bg-[#F5D14E]" />
-      </View>
-
-      {/* Bar labels */}
-      <View className="mt-2 flex-row items-center justify-between">
-        <Text className="text-xs text-white/40">In at 9:12 AM</Text>
-        <Text className="text-xs text-white/40">Target · 8h 00m</Text>
-      </View>
-
-      {/* Actions */}
-      <View className="mt-6 flex-row gap-3">
-        <Pressable
-          onPress={() => setIsCheckedIn((prev) => !prev)}
-          className="h-14 flex-1 flex-row items-center justify-center gap-2 rounded-2xl bg-[#F5D14E]"
-        >
-          <Feather
-            name={isCheckedIn ? 'log-out' : 'log-in'}
-            size={18}
-            color="#16202E"
-          />
-          <Text className="text-base font-bold text-[#16202E]">
-            {isCheckedIn ? 'Check out' : 'Check in'}
+    <View style={cardShadow} className="rounded-3xl bg-[#14323F] p-6">
+      <View className="flex-row items-center">
+        {/* Left: date, status, time */}
+        <View className="flex-1 pr-4">
+          <Text className="text-xs font-bold uppercase tracking-wider text-white/40">
+            {dateStr}
           </Text>
-        </Pressable>
 
-        <Pressable className="h-14 w-14 items-center justify-center rounded-2xl bg-white/10">
-          <Feather name="message-circle" size={20} color="#FFFFFF" />
-        </Pressable>
+          {/* Status pill */}
+          <View className="mt-3 flex-row">
+            <View className="flex-row items-center gap-2 rounded-full bg-white/10 px-3 py-1.5">
+              <View
+                className="h-2 w-2 rounded-full"
+                style={{ backgroundColor: isPunchedIn ? YELLOW : '#94A3B8' }}
+              />
+              <Text className="text-sm font-semibold text-white">
+                {isPunchedIn ? 'Punched in' : 'Not punched in yet'}
+              </Text>
+            </View>
+          </View>
+
+          {/* Live time */}
+          <View className="mt-4 flex-row items-center gap-2">
+            <Feather name="clock" size={20} color={YELLOW} />
+            <Text className="text-4xl font-bold tracking-tight text-white">
+              {time}
+            </Text>
+          </View>
+
+          {/* Status note */}
+          <Text
+            className="mt-3 text-sm font-medium"
+            style={{ color: isPunchedIn ? '#6FCF97' : '#F08D7E' }}
+          >
+            {isPunchedIn ? 'Punched in successfully.' : 'Unable to punch in.'}
+          </Text>
+        </View>
+
+        {/* Right: dashed ring + yellow punch button */}
+        <View
+          className="items-center justify-center rounded-full p-2"
+          style={{
+            borderWidth: 2,
+            borderColor: 'rgba(255,255,255,0.25)',
+            borderStyle: 'dashed',
+          }}
+        >
+          <Pressable
+            onPress={() => setIsPunchedIn((prev) => !prev)}
+            className="h-28 w-28 items-center justify-center rounded-full transition duration-200 active:scale-95"
+            style={{ backgroundColor: YELLOW }}
+          >
+            <MaterialCommunityIcons name="fingerprint" size={40} color={NAVY} />
+            <Text className="mt-1 text-xs font-extrabold tracking-wide text-[#14323F]">
+              {isPunchedIn ? 'PUNCH OUT' : 'PUNCH IN'}
+            </Text>
+          </Pressable>
+        </View>
       </View>
     </View>
   );

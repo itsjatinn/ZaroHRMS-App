@@ -5,7 +5,7 @@ import { cardShadow } from './shadow';
 
 export default function PaydayCard() {
   return (
-    <View style={cardShadow} className="flex-1 rounded-3xl bg-[#16202E] p-5">
+    <View style={cardShadow} className="flex-1 rounded-3xl bg-[#14323F] p-5">
       {/* Top: wallet icon + title */}
       <View className="flex-row items-center gap-2">
         <View className="h-9 w-9 items-center justify-center rounded-xl bg-white/10">

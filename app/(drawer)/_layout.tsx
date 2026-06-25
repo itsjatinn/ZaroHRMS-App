@@ -13,7 +13,7 @@ export default function DrawerLayout() {
         overlayColor: 'transparent',
         drawerStyle: {
           backgroundColor: '#14323F',
-          width: '82%',
+          width: '65%',
         },
       }}
     >
