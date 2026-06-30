@@ -3,6 +3,7 @@
     "name": "ZaroHR",
     "slug": "zarohr",
     "version": "1.0.0",
+    "scheme": "zarohrm",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -10,7 +11,7 @@
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#14323F"
     },
     "ios": {
       "bundleIdentifier": "com.zarohr.app",
@@ -18,6 +19,7 @@
     },
     "android": {
       "package": "com.zarohr.app",
+      "softwareKeyboardLayoutMode": "resize",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
@@ -30,14 +32,15 @@
     },
     "plugins": [
       "expo-secure-store",
-      "@sentry/react-native",
       [
         "expo-image-picker",
         {
           "photosPermission": "ZaroHR needs access to your photos to update your profile picture.",
           "cameraPermission": "ZaroHR needs access to your camera to take a new profile picture."
         }
-      ]
+      ],
+      "expo-router",
+      "expo-font"
     ]
   }
 }
