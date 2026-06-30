@@ -10,12 +10,13 @@ import {
 } from '@expo-google-fonts/plus-jakarta-sans';
 import { SplashScreen, Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Text, TextInput } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { AuthProvider, useAuth } from '../src/auth/AuthContext';
+import AnimatedSplash from '../src/components/AnimatedSplash';
 
 // Keep the native splash up until fonts and the persisted session are both
 // ready, so we never render text in a fallback font or flash the sign-in screen.
@@ -63,29 +64,44 @@ textInputDefaults.defaultProps = {
 function RootNavigator({ fontsLoaded }: { fontsLoaded: boolean }) {
   const { isAuthenticated, isLoading } = useAuth();
 
-  // Reveal the app once fonts are ready and the persisted session has been
-  // restored. The navigator stays mounted the whole time (the splash covers the
-  // loading window) — returning a non-navigator anywhere in the root tree would
-  // break Expo Router's navigation context.
+  // `appReady` flips once fonts + session are restored. Until then the native
+  // splash covers everything; afterwards we hand off to the animated splash,
+  // which plays its premium entrance/exit before unmounting via `splashDone`.
+  const appReady = fontsLoaded && !isLoading;
+  const [splashDone, setSplashDone] = useState(false);
+
+  // Hide the native splash as soon as the app is ready. The animated splash is
+  // already mounted on top (opaque white), so there is no flash in between. The
+  // navigator stays mounted the whole time — returning a non-navigator anywhere
+  // in the root tree would break Expo Router's navigation context.
   useEffect(() => {
-    if (fontsLoaded && !isLoading) SplashScreen.hideAsync();
-  }, [fontsLoaded, isLoading]);
+    if (appReady) SplashScreen.hideAsync();
+  }, [appReady]);
 
   return (
-    <Stack
-      screenOptions={{
-        headerShown: false,
-        animation: 'fade',
-        animationDuration: 250,
-      }}
-    >
-      <Stack.Protected guard={isAuthenticated}>
-        <Stack.Screen name="(drawer)" />
-      </Stack.Protected>
-      <Stack.Protected guard={!isAuthenticated}>
-        <Stack.Screen name="(auth)" />
-      </Stack.Protected>
-    </Stack>
+    <>
+      <Stack
+        screenOptions={{
+          headerShown: false,
+          animation: 'fade',
+          animationDuration: 250,
+        }}
+      >
+        <Stack.Protected guard={isAuthenticated}>
+          <Stack.Screen name="(drawer)" />
+        </Stack.Protected>
+        <Stack.Protected guard={!isAuthenticated}>
+          <Stack.Screen name="(auth)" />
+        </Stack.Protected>
+      </Stack>
+
+      {!splashDone && (
+        <AnimatedSplash
+          isAppReady={appReady}
+          onFinish={() => setSplashDone(true)}
+        />
+      )}
+    </>
   );
 }
 
