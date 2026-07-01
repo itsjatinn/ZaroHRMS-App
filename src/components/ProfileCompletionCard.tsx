@@ -5,76 +5,102 @@ import Svg, { Circle } from 'react-native-svg';
 
 import { cardShadow } from './shadow';
 
-const PROGRESS = '#D9A53B';
-const TRACK = '#E2E2DE';
+// Profile-completion progress. Swap DONE_STEPS for real data when wired up.
+export const TOTAL_STEPS = 5;
+export const DONE_STEPS = 1;
+export const PERCENT = Math.round((DONE_STEPS / TOTAL_STEPS) * 100);
+export const ITEMS_LEFT = TOTAL_STEPS - DONE_STEPS;
+export const PROFILE_INCOMPLETE = DONE_STEPS < TOTAL_STEPS;
 
-const TOTAL_STEPS = 5;
-const DONE_STEPS = 1;
-const PERCENT = Math.round((DONE_STEPS / TOTAL_STEPS) * 100);
+const PROGRESS = '#14323F'; // ink teal (brand primary)
+const TRACK = '#D2E0E1';
 
 // Ring sizing
-const SIZE = 64;
-const STROKE = 8;
+const SIZE = 76;
+const STROKE = 7;
 const R = (SIZE - STROKE) / 2;
 const C = 2 * Math.PI * R;
 
-function ProgressRing() {
+export function ProgressRing() {
   const arc = (PERCENT / 100) * C;
 
   return (
-    <Svg width={SIZE} height={SIZE}>
-      {/* Track */}
-      <Circle
-        cx={SIZE / 2}
-        cy={SIZE / 2}
-        r={R}
-        fill="none"
-        stroke={TRACK}
-        strokeWidth={STROKE}
-      />
-      {/* Progress */}
-      <Circle
-        cx={SIZE / 2}
-        cy={SIZE / 2}
-        r={R}
-        fill="none"
-        stroke={PROGRESS}
-        strokeWidth={STROKE}
-        strokeDasharray={`${arc} ${C}`}
-        strokeLinecap="round"
-        transform={`rotate(-90 ${SIZE / 2} ${SIZE / 2})`}
-      />
-    </Svg>
+    <View style={{ width: SIZE, height: SIZE }} className="items-center justify-center">
+      <Svg width={SIZE} height={SIZE} style={{ position: 'absolute' }}>
+        <Circle
+          cx={SIZE / 2}
+          cy={SIZE / 2}
+          r={R}
+          fill="none"
+          stroke={TRACK}
+          strokeWidth={STROKE}
+        />
+        <Circle
+          cx={SIZE / 2}
+          cy={SIZE / 2}
+          r={R}
+          fill="none"
+          stroke={PROGRESS}
+          strokeWidth={STROKE}
+          strokeDasharray={`${arc} ${C}`}
+          strokeLinecap="round"
+          transform={`rotate(-90 ${SIZE / 2} ${SIZE / 2})`}
+        />
+      </Svg>
+      <Text className="text-lg font-bold text-ink">{PERCENT}%</Text>
+    </View>
   );
 }
 
-export default function ProfileCompletionCard() {
+/**
+ * The body of the profile-completion card: ring + heading + CTA. Shared by the
+ * home-screen card and the first-load popup so they look identical.
+ */
+export function ProfileCompletionBody() {
   const router = useRouter();
 
   return (
-    <View
-      style={cardShadow}
-      className="flex-row items-center rounded-3xl bg-[#F4F4F2] p-5"
-    >
+    <View className="flex-row items-center">
       <ProgressRing />
 
-      {/* Progress text */}
       <View className="ml-4 flex-1">
-        <Text className="text-2xl font-bold text-ink">{PERCENT}%</Text>
-        <Text className="mt-0.5 text-sm font-semibold text-[#C0552F]">
-          {TOTAL_STEPS - DONE_STEPS} items left
+        <Text className="text-[17px] font-bold text-ink">
+          Complete your profile
         </Text>
-      </View>
+        <Text className="mt-1 text-[13px] leading-5 text-[#5B7B82]">
+          Finish setting up to help your team reach you.
+        </Text>
 
-      {/* View profile chip */}
-      <Pressable
-        onPress={() => router.push('/settings')}
-        hitSlop={8}
-        className="flex-row items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3.5 py-2 active:scale-95"
-      >
-        <Text className="text-sm font-semibold text-slate-600">View profile</Text>
-        <Feather name="arrow-right" size={15} color="#475569" />
-      </Pressable>
+        <Pressable
+          onPress={() => router.push('/view-profile')}
+          className="mt-3 flex-row items-center gap-1.5 self-start rounded-full bg-ink px-4 py-2.5 active:scale-[0.98]"
+        >
+          <Text className="text-[13px] font-bold text-white">Complete profile</Text>
+          <Feather name="arrow-right" size={15} color="#FFFFFF" />
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
+export default function ProfileCompletionCard({ onClose }: { onClose?: () => void }) {
+  return (
+    <View
+      style={cardShadow}
+      className="overflow-hidden rounded-3xl border border-[#CFE0E1] bg-[#EAF1F1] p-5"
+    >
+      {onClose ? (
+        <Pressable
+          onPress={onClose}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel="Dismiss"
+          className="absolute right-3 top-3 z-10 h-7 w-7 items-center justify-center rounded-full bg-black/5 active:scale-90"
+        >
+          <Feather name="x" size={15} color="#5B7B82" />
+        </Pressable>
+      ) : null}
+      <ProfileCompletionBody />
     </View>
   );
 }

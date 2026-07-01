@@ -13,7 +13,7 @@ export default function Documents() {
   const download = (name: string) => Alert.alert('Download started', `${name} (PDF)`);
 
   return (
-    <SafeAreaView edges={['top', 'left', 'right']} className="flex-1 bg-[#F4F3EF]">
+    <SafeAreaView edges={['top', 'left', 'right']} className="flex-1 bg-canvas">
       <BackButton title="Documents" />
       <ScrollView
         className="flex-1"

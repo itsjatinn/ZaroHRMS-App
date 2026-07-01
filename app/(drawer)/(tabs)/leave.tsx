@@ -30,11 +30,11 @@ export default function LeaveOverviewScreen() {
   const [year, setYear] = useState<string>('2026');
 
   return (
-    <SafeAreaView edges={['top', 'left', 'right']} className="flex-1 bg-[#F4F3EF]">
+    <SafeAreaView edges={['top', 'left', 'right']} className="flex-1 bg-canvas">
       <BackButton />
       <ScrollView
         className="flex-1"
-        contentContainerClassName="p-4 gap-6 pb-12"
+        contentContainerClassName="p-4 gap-6 pb-32"
         showsVerticalScrollIndicator={false}
       >
         {/* Header */}
@@ -109,7 +109,7 @@ export default function LeaveOverviewScreen() {
         </View>
 
         {/* Leave Requests */}
-        <View style={cardShadow} className="rounded-2xl bg-white p-5">
+        <View style={cardShadow} className="rounded-[24px] border border-slate-100 bg-white p-5">
           <Text className="text-base font-bold text-ink">Leave Requests</Text>
           <Pressable hitSlop={6} className="mt-1 self-start active:opacity-60">
             <Text className="text-xs font-semibold text-blue-600">View All</Text>

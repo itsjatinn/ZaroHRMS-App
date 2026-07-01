@@ -8,7 +8,9 @@ export default function AnnouncementCard({ item }: { item: Announcement }) {
   return (
     <View
       style={cardShadow}
-      className={`rounded-2xl bg-white p-5 ${item.pinned ? 'border border-[#F5D14E]' : ''}`}
+      className={`rounded-[24px] border bg-white p-5 ${
+        item.pinned ? 'border-[#F5D14E]' : 'border-slate-100'
+      }`}
     >
       <View className="flex-row items-center justify-between">
         <View className={`flex-row items-center gap-1.5 rounded-md px-2 py-0.5 ${item.badge}`}>

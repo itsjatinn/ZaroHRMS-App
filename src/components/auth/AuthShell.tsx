@@ -6,33 +6,38 @@ import {
   ScrollView,
   Text,
   View,
+  type ImageSourcePropType,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { cardShadow } from '../shadow';
+import CardEntrance, { StaggerItem } from './CardEntrance';
 import { font } from './fonts';
-import Logo from '../../../assets/logo_big.svg';
+import LoginVisual from './LoginVisual';
 
 type AuthShellProps = {
   title: string;
   subtitle: string;
   children: ReactNode;
-  /** Hide the small "ZARO" wordmark above the title (matches the reset screen). */
-  showWordmark?: boolean;
+  /** Hide the illustration (e.g. deeper flow screens that want more room). */
+  showVisual?: boolean;
+  /** Screen-specific illustration; defaults to the login artwork. */
+  visualSource?: ImageSourcePropType;
 };
 
-// Shared scaffold for every auth screen: dark teal backdrop + centered white
-// card with the Zaro logo, wordmark, title and subtitle. Pages pass their form
-// fields and actions as children.
+// Shared scaffold for every auth screen, light & airy with no card: a brand
+// illustration sits at the top, then a subtitle line and the form. Pages pass
+// their fields and actions as children.
 export default function AuthShell({
   title,
   subtitle,
   children,
-  showWordmark = true,
+  showVisual = true,
+  visualSource,
 }: AuthShellProps) {
-  // Track the keyboard's actual height. We add that much bottom padding to the
-  // scroll area so every field/button can scroll fully above the keyboard
-  // (nothing left half-covered), and hide the logo while typing to stay compact.
+  // Track the keyboard's real height. Under Android edge-to-edge the OS does not
+  // resize the window, so we add the keyboard height as scroll padding ourselves
+  // — that makes the content scroll every field above the keyboard. We also hide
+  // the visual while typing to keep the form compact.
   const [kbHeight, setKbHeight] = useState(0);
   useEffect(() => {
     const onShow = (e: { endCoordinates?: { height: number } }) => {
@@ -53,64 +58,71 @@ export default function AuthShell({
 
   const keyboardOpen = kbHeight > 0;
 
+  // Center when the content fits the free space (viewport minus keyboard), else
+  // top-anchor + scroll so nothing crops on small screens or with the keyboard.
+  const [viewportH, setViewportH] = useState(0);
+  const [contentH, setContentH] = useState(0);
+  const availableH = viewportH - kbHeight;
+  const fits = contentH > 0 && availableH > 0 && contentH <= availableH;
+
   return (
-    <SafeAreaView className="flex-1 bg-ink">
-      <StatusBar style="light" />
+    <SafeAreaView className="flex-1 bg-canvas" edges={['top', 'left', 'right']}>
+      <StatusBar style="dark" />
       <ScrollView
         className="flex-1"
+        onLayout={(e) => setViewportH(e.nativeEvent.layout.height)}
         contentContainerStyle={{
           flexGrow: 1,
-          paddingHorizontal: 20,
+          paddingHorizontal: 28,
           paddingTop: 20,
-          // Keyboard height + a little margin = enough room to scroll the lowest
-          // element fully into view above the keyboard.
-          paddingBottom: keyboardOpen ? kbHeight + 24 : 20,
-          justifyContent: keyboardOpen ? 'flex-start' : 'center',
+          paddingBottom: 24 + kbHeight,
+          // Anchor to the top when the hero image is showing so it sits high on
+          // the screen; otherwise center the form when it fits.
+          justifyContent:
+            showVisual && !keyboardOpen ? 'flex-start' : fits ? 'center' : 'flex-start',
         }}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
         showsVerticalScrollIndicator={false}
       >
         <View
-          className={`w-full max-w-[440px] self-center rounded-[28px] bg-white px-7 ${
-            keyboardOpen ? 'py-6' : 'py-9'
-          }`}
-          style={cardShadow}
+          className="w-full max-w-[440px] self-center"
+          onLayout={(e) => setContentH(e.nativeEvent.layout.height)}
         >
-            {/* Logo + wordmark — hidden while typing to keep the form compact */}
-            {!keyboardOpen ? (
-              <>
-                <View className="h-20 w-20 items-center justify-center self-center rounded-2xl bg-slate-100">
-                  <Logo width={46} height={46} />
+          <CardEntrance>
+            {/* Brand illustration — sits near the top, nudged down a little. */}
+            {showVisual && !keyboardOpen ? (
+              <StaggerItem>
+                <View className="mt-10 w-full items-center">
+                  <LoginVisual source={visualSource} />
                 </View>
-
-                {showWordmark ? (
-                  <Text
-                    className="mt-3 text-center text-xs text-[#48626E]"
-                    style={{ fontFamily: font.bold, letterSpacing: 4 }}
-                  >
-                    ZARO
-                  </Text>
-                ) : null}
-              </>
+              </StaggerItem>
             ) : null}
 
-            <Text
-              className={`text-center text-[34px] leading-tight text-[#0F172A] ${
-                keyboardOpen ? '' : 'mt-4'
-              }`}
-              style={{ fontFamily: font.bold }}
-            >
-              {title}
-            </Text>
+            {/* Heading — title + gold accent + subtitle, on every auth screen. */}
+            <StaggerItem>
+              <View className="mt-12">
+                <Text
+                  className="text-[30px] leading-tight text-ink"
+                  style={{ fontFamily: font.bold }}
+                >
+                  {title}
+                </Text>
+                <View className="mb-2 mt-1.5 h-1 w-12 rounded-full bg-gold" />
+                <Text
+                  className="text-base text-[#5B6B72]"
+                  style={{ fontFamily: font.regular }}
+                >
+                  {subtitle}
+                </Text>
+              </View>
+            </StaggerItem>
 
-            <Text className="mt-2 text-center text-base text-slate-500">
-              {subtitle}
-            </Text>
-
-            <View className={keyboardOpen ? 'mt-5' : 'mt-7'}>{children}</View>
-          </View>
-        </ScrollView>
+            {/* Form fields + actions — sit right below the heading */}
+            <View className="mt-5">{children}</View>
+          </CardEntrance>
+        </View>
+      </ScrollView>
     </SafeAreaView>
   );
 }

@@ -8,7 +8,7 @@ import { HOLIDAYS } from './holidaysData';
 // Full list of holidays with tinted date-boxes.
 export default function HolidayListCard() {
   return (
-    <View style={cardShadow} className="rounded-2xl bg-white p-5">
+    <View style={cardShadow} className="rounded-[24px] border border-slate-100 bg-white p-5">
       <View className="mb-2 flex-row items-center gap-2">
         <Palmtree size={18} color="#3F8F5B" />
         <Text className="text-base font-bold text-ink">Holiday Calendar 2026</Text>

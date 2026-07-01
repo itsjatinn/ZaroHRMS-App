@@ -15,7 +15,6 @@ import {
   CalendarCheck,
   CalendarDays,
   ClipboardList,
-  FileText,
   Home,
   UserRound,
   CircleEllipsis,
@@ -42,7 +41,6 @@ const STATS = [
 const CARDS = [
   { label: 'My Tasks',      sub: '34 tasks assigned',  Icon: ClipboardList },
   { label: 'Leave Request', sub: '2 pending approval',  Icon: CalendarDays },
-  { label: 'Payslip',       sub: 'Feb 2026 available',  Icon: FileText },
   { label: 'My Profile',    sub: 'PHL-2024-089',        Icon: UserRound },
 ];
 
@@ -50,7 +48,6 @@ const FOOTER_TABS = [
   { key: 'home', label: 'Home', Icon: Home },
   { key: 'attendance', label: 'Attendance', Icon: CalendarCheck },
   { key: 'leave', label: 'Leave', Icon: CalendarDays },
-  { key: 'payslips', label: 'Payslips', Icon: FileText },
   { key: 'more', label: 'More', Icon: CircleEllipsis },
 ] as const;
 
@@ -59,13 +56,13 @@ function Card({ card }: { card: (typeof CARDS)[number] }) {
 
   return (
     <Pressable
-      className="flex-1 rounded-[32px] bg-white p-5"
+      className="flex-1 rounded-[24px] border border-slate-100 bg-white p-5"
       style={{
         shadowColor: '#0d3749',
-        shadowOffset: { width: 0, height: 10 },
-        shadowOpacity: 0.05,
-        shadowRadius: 20,
-        elevation: 5,
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.025,
+        shadowRadius: 6,
+        elevation: 1,
       }}
       accessibilityRole="button"
     >
@@ -186,7 +183,7 @@ export default function HomePage() {
           </Animated.View>
         )}
 
-        <View className="flex-1 bg-[#f7f9fb]">
+        <View className="flex-1 bg-canvas">
           <ScrollView 
             className="flex-1" 
             contentContainerStyle={{
@@ -200,13 +197,13 @@ export default function HomePage() {
                 {/* Logo slot — reserved for brand mark */}
                 <View className="h-12 justify-center" />
 
-                <Pressable className="h-12 w-12 items-center justify-center rounded-2xl bg-white shadow-sm"
+                <Pressable className="h-12 w-12 items-center justify-center rounded-2xl border border-slate-100 bg-white"
                   style={{
                     shadowColor: '#000',
                     shadowOffset: { width: 0, height: 2 },
-                    shadowOpacity: 0.05,
+                    shadowOpacity: 0.025,
                     shadowRadius: 5,
-                    elevation: 2
+                    elevation: 1
                   }}
                 >
                   <Bell size={20} color="#0d3749" strokeWidth={2.2} />
@@ -246,13 +243,13 @@ export default function HomePage() {
                 {STATS.map((stat, index) => (
                   <View 
                     key={index} 
-                    className="flex-1 rounded-[28px] bg-white p-4 items-center justify-center"
+                    className="flex-1 items-center justify-center rounded-[24px] border border-slate-100 bg-white p-4"
                     style={{
                       shadowColor: '#0d3749',
-                      shadowOffset: { width: 0, height: 8 },
-                      shadowOpacity: 0.04,
-                      shadowRadius: 15,
-                      elevation: 3,
+                      shadowOffset: { width: 0, height: 2 },
+                      shadowOpacity: 0.025,
+                      shadowRadius: 6,
+                      elevation: 1,
                     }}
                   >
                     <Text className="text-2xl font-bold" style={{ color: stat.color }}>{stat.value}</Text>
@@ -272,7 +269,6 @@ export default function HomePage() {
                 </View>
                 <View className="flex-row gap-4">
                   <Card card={CARDS[2]} />
-                  <Card card={CARDS[3]} />
                 </View>
               </View>
             </View>

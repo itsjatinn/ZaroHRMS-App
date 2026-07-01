@@ -4,11 +4,17 @@ import { Pressable, Text, View } from 'react-native';
 
 type BackButtonProps = {
   title?: string;
+  subtitle?: string;
+  subtitleNumberOfLines?: number;
 };
 
-// A top-left back control + optional page title. Falls back to the home
-// route if there is nothing to go back to.
-export default function BackButton({ title }: BackButtonProps) {
+// A top-left back control + optional page title/subtitle (shown to the right of
+// the button). Falls back to the home route if there is nothing to go back to.
+export default function BackButton({
+  title,
+  subtitle,
+  subtitleNumberOfLines = 1,
+}: BackButtonProps) {
   const router = useRouter();
 
   const goBack = () => {
@@ -26,7 +32,14 @@ export default function BackButton({ title }: BackButtonProps) {
         <ChevronLeft size={20} color="#14323F" />
       </Pressable>
       {title ? (
-        <Text className="text-lg font-bold text-ink">{title}</Text>
+        <View className="flex-1">
+          <Text className="text-lg font-bold text-ink">{title}</Text>
+          {subtitle ? (
+            <Text className="text-xs text-slate-400" numberOfLines={subtitleNumberOfLines}>
+              {subtitle}
+            </Text>
+          ) : null}
+        </View>
       ) : null}
     </View>
   );

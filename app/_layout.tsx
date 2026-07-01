@@ -98,6 +98,9 @@ function RootNavigator({ fontsLoaded }: { fontsLoaded: boolean }) {
       {!splashDone && (
         <AnimatedSplash
           isAppReady={appReady}
+          // Page-turn slide only when handing off to the auth card (which slides
+          // in to meet it). Going straight to the app, fade out instead.
+          slideExit={!isAuthenticated}
           onFinish={() => setSplashDone(true)}
         />
       )}

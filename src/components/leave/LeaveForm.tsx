@@ -84,7 +84,7 @@ export default function LeaveForm({
   const typeOptions = LEAVE_TYPES.map((t) => t.short);
 
   return (
-    <View style={cardShadow} className="rounded-2xl bg-white p-5">
+    <View style={cardShadow} className="rounded-[24px] border border-slate-100 bg-white p-5">
       {/* Title */}
       <View className="flex-row items-center gap-3">
         <View className="h-10 w-10 items-center justify-center rounded-xl bg-blue-100">

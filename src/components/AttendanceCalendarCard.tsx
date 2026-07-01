@@ -2,8 +2,6 @@ import { Feather } from '@expo/vector-icons';
 import { useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 
-import { cardShadow } from './shadow';
-
 const NAVY = '#14323F';
 const WEEKDAYS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 
@@ -35,9 +33,23 @@ const LEGEND: { label: string; color: string }[] = [
   { label: 'Leave approved', color: '#B8881F' },
 ];
 
-export default function AttendanceCalendarCard() {
-  // month is 0-indexed; default June 2026.
-  const [cursor, setCursor] = useState({ year: 2026, month: 5 });
+type AttendanceCalendarCardProps = {
+  variant?: 'card' | 'plain';
+  /** When provided, the calendar is controlled by the parent (arrows hidden). */
+  year?: number;
+  month?: number; // 0-11
+};
+
+export default function AttendanceCalendarCard({
+  variant = 'card',
+  year,
+  month,
+}: AttendanceCalendarCardProps) {
+  // month is 0-indexed; default June 2026 when uncontrolled.
+  const [internal, setInternal] = useState({ year: 2026, month: 5 });
+  const controlled = year != null && month != null;
+  const cursor = controlled ? { year: year!, month: month! } : internal;
+  const setCursor = setInternal;
 
   const isDemoMonth = cursor.year === 2026 && cursor.month === 5;
   const firstDay = new Date(cursor.year, cursor.month, 1).getDay();
@@ -66,26 +78,37 @@ export default function AttendanceCalendarCard() {
     });
 
   return (
-    <View style={cardShadow} className="rounded-3xl bg-white p-6">
-      {/* Month navigation */}
-      <View className="flex-row items-center justify-center gap-4">
-        <Pressable
-          onPress={() => shiftMonth(-1)}
-          className="h-9 w-9 items-center justify-center rounded-xl border border-slate-200 active:scale-95"
-        >
-          <Feather name="chevron-left" size={18} color={NAVY} />
-        </Pressable>
-        <Text className="text-base font-bold text-ink">{label}</Text>
-        <Pressable
-          onPress={() => shiftMonth(1)}
-          className="h-9 w-9 items-center justify-center rounded-xl border border-slate-200 active:scale-95"
-        >
-          <Feather name="chevron-right" size={18} color={NAVY} />
-        </Pressable>
+    <View
+      className={
+        variant === 'card'
+          ? 'rounded-[24px] border border-slate-100 bg-white px-5 py-5'
+          : 'px-1 py-1'
+      }
+    >
+      <View className="flex-row items-center justify-between">
+        <Text className="text-base font-bold text-ink">Attendance</Text>
+        {controlled ? (
+          <Text className="text-base font-bold text-ink">{label}</Text>
+        ) : (
+          <View className="flex-row items-center gap-3">
+            <Pressable
+              onPress={() => shiftMonth(-1)}
+              className="h-9 w-9 items-center justify-center rounded-xl bg-slate-50 active:scale-95"
+            >
+              <Feather name="chevron-left" size={18} color={NAVY} />
+            </Pressable>
+            <Text className="text-base font-bold text-ink">{label}</Text>
+            <Pressable
+              onPress={() => shiftMonth(1)}
+              className="h-9 w-9 items-center justify-center rounded-xl bg-slate-50 active:scale-95"
+            >
+              <Feather name="chevron-right" size={18} color={NAVY} />
+            </Pressable>
+          </View>
+        )}
       </View>
 
-      {/* Weekday header */}
-      <View className="mt-6 flex-row">
+      <View className="mt-5 flex-row">
         {WEEKDAYS.map((d, i) => (
           <Text
             key={i}
@@ -96,7 +119,6 @@ export default function AttendanceCalendarCard() {
         ))}
       </View>
 
-      {/* Day grid */}
       <View className="mt-2">
         {weeks.map((week, wi) => (
           <View key={wi} className="flex-row">
@@ -133,8 +155,7 @@ export default function AttendanceCalendarCard() {
         ))}
       </View>
 
-      {/* Legend */}
-      <View className="mt-6 flex-row flex-wrap gap-x-4 gap-y-2 border-t border-slate-100 pt-5">
+      <View className="mt-5 flex-row flex-wrap gap-x-4 gap-y-2 border-t border-slate-100 pt-4">
         {LEGEND.map((item) => (
           <View key={item.label} className="flex-row items-center gap-1.5">
             <View

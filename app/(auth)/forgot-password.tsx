@@ -43,8 +43,9 @@ export default function ForgotPasswordScreen() {
     <AuthShell
       title="Forgot password"
       subtitle="Enter your email and we'll send you a link to reset it."
+      visualSource={require('../../assets/forgot_pass.png')}
     >
-      <View className="gap-5">
+      <View className="gap-4">
         <AuthField
           label="Email"
           value={email}
