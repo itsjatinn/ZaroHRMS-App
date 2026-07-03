@@ -6,7 +6,7 @@ export const unstable_settings = {
 };
 
 // Auth flow: sign-in -> forgot-password -> reset-password. No headers; each
-// screen draws its own card. Animation matches the root stack.
+// screen draws its own card.
 export default function AuthLayout() {
   return (
     <Stack

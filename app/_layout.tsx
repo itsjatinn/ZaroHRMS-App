@@ -14,9 +14,17 @@ import { useEffect, useState } from 'react';
 import { Text, TextInput } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { enableFreeze } from 'react-native-screens';
 
 import { AuthProvider, useAuth } from '../src/auth/AuthContext';
 import AnimatedSplash from '../src/components/AnimatedSplash';
+
+// Disable react-freeze. When a screen is pushed on top, freeze suspends the
+// screen below and re-renders it on return; on Android that re-measure clips the
+// last character of bold custom-font text (e.g. "Sign in" -> "Sign ir" after
+// returning from forgot-password). Keeping screens unfrozen preserves the
+// original, correct text layout.
+enableFreeze(false);
 
 // Keep the native splash up until fonts and the persisted session are both
 // ready, so we never render text in a fallback font or flash the sign-in screen.
@@ -43,8 +51,13 @@ const textInputDefaults = TextInput as typeof TextInput & {
   };
 };
 
+// The UI is laid out at the fixed sizes from the mockups. Letting the OS scale
+// fonts (large "Font size"/"Display size" on many Android phones, e.g. MIUI)
+// inflates every label and causes text to clip or overflow horizontally on some
+// devices. Cap scaling so the layout renders consistently across screen sizes.
 textDefaults.defaultProps = {
   ...textDefaults.defaultProps,
+  allowFontScaling: false,
   style: [
     textDefaults.defaultProps?.style,
     { fontFamily: 'PlusJakartaSans_400Regular' },
@@ -52,6 +65,7 @@ textDefaults.defaultProps = {
 };
 textInputDefaults.defaultProps = {
   ...textInputDefaults.defaultProps,
+  allowFontScaling: false,
   style: [
     textInputDefaults.defaultProps?.style,
     { fontFamily: 'PlusJakartaSans_400Regular' },

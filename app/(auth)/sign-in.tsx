@@ -116,7 +116,7 @@ export default function SignInScreen() {
             <Pressable onPress={() => setShowPassword((v) => !v)} hitSlop={8}>
               <Text
                 className="text-sm text-ink"
-                style={{ fontFamily: font.semibold }}
+                style={{ fontFamily: font.semibold, paddingRight: 10 }}
               >
                 {showPassword ? 'Hide' : 'Show'}
               </Text>
@@ -137,7 +137,7 @@ export default function SignInScreen() {
           <Pressable hitSlop={8} className="mt-2 self-center">
             <Text
               className="text-base text-ink"
-              style={{ fontFamily: font.semibold }}
+              style={{ fontFamily: font.semibold, paddingHorizontal: 12 }}
             >
               Forgot password?
             </Text>

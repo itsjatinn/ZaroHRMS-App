@@ -5,6 +5,7 @@ import {
   LayoutAnimation,
   ScrollView,
   Text,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -33,6 +34,11 @@ export default function AuthShell({
   // Track the keyboard's actual height. We add that much bottom padding to the
   // scroll area so every field/button can scroll fully above the keyboard
   // (nothing left half-covered), and hide the logo while typing to stay compact.
+  // Scale the title to the screen width so long titles ("Forgot password")
+  // don't overflow on narrow phones; clamp to the mockup size on larger ones.
+  const { width } = useWindowDimensions();
+  const titleSize = Math.min(34, Math.round(width * 0.082));
+
   const [kbHeight, setKbHeight] = useState(0);
   useEffect(() => {
     const onShow = (e: { endCoordinates?: { height: number } }) => {
@@ -96,10 +102,12 @@ export default function AuthShell({
             ) : null}
 
             <Text
-              className={`text-center text-[34px] leading-tight text-[#0F172A] ${
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              className={`text-center leading-tight text-[#0F172A] ${
                 keyboardOpen ? '' : 'mt-4'
               }`}
-              style={{ fontFamily: font.bold }}
+              style={{ fontFamily: font.bold, fontSize: titleSize }}
             >
               {title}
             </Text>

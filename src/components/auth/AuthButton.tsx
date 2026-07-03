@@ -34,8 +34,12 @@ export default function AuthButton({
     >
       {loading ? <ActivityIndicator color="#14323F" /> : null}
       <Text
+        // Horizontal padding gives the bold custom font room so Android doesn't
+        // clip the last character (e.g. "Sign in" -> "Sign ir"). Unlike
+        // adjustsFontSizeToFit this is part of layout, so it survives the
+        // re-measure that happens when navigating back to the screen.
         className="text-base text-[#14323F]"
-        style={{ fontFamily: font.bold }}
+        style={{ fontFamily: font.bold, paddingHorizontal: 12 }}
       >
         {label}
       </Text>
