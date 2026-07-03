@@ -10,7 +10,7 @@ export default function FaqCard() {
   const [open, setOpen] = useState<number | null>(0);
 
   return (
-    <View style={cardShadow} className="rounded-2xl bg-white p-5">
+    <View style={cardShadow} className="rounded-[24px] border border-slate-100 bg-white p-5">
       <View className="mb-1 flex-row items-center gap-2">
         <LifeBuoy size={18} color="#14323F" />
         <Text className="text-base font-bold text-ink">FAQs</Text>

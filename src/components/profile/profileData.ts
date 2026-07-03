@@ -22,6 +22,10 @@ export type InfoItem = {
   value: string;
   color: string;
   badge: string;
+  /** Editor to use for this field. Defaults to 'text'. */
+  type?: 'text' | 'select' | 'date';
+  /** Options for a 'select' field. */
+  options?: string[];
 };
 
 export const PROFILE = {
@@ -35,9 +39,9 @@ export const PROFILE = {
 export const PERSONAL_INFO: InfoItem[] = [
   { icon: Mail, label: 'Email', value: 'jittu.verma@zarohrms.com', color: '#2563EB', badge: 'bg-blue-100' },
   { icon: Phone, label: 'Phone', value: '+91 98765 43210', color: '#059669', badge: 'bg-emerald-100' },
-  { icon: Cake, label: 'Date of Birth', value: '14 Aug 1996', color: '#E0785C', badge: 'bg-rose-100' },
-  { icon: User, label: 'Gender', value: 'Male', color: '#6B5FCF', badge: 'bg-violet-100' },
-  { icon: Droplet, label: 'Blood Group', value: 'O+', color: '#E11D48', badge: 'bg-rose-100' },
+  { icon: Cake, label: 'Date of Birth', value: '14 Aug 1996', color: '#E0785C', badge: 'bg-rose-100', type: 'date' },
+  { icon: User, label: 'Gender', value: 'Male', color: '#6B5FCF', badge: 'bg-violet-100', type: 'select', options: ['Male', 'Female', 'Other', 'Prefer not to say'] },
+  { icon: Droplet, label: 'Blood Group', value: 'O+', color: '#E11D48', badge: 'bg-rose-100', type: 'select', options: ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'] },
   { icon: MapPin, label: 'Address', value: 'Bengaluru, Karnataka', color: '#D9A53B', badge: 'bg-amber-100' },
 ];
 
@@ -45,8 +49,8 @@ export const JOB_INFO: InfoItem[] = [
   { icon: Briefcase, label: 'Designation', value: 'Senior Software Engineer', color: '#2563EB', badge: 'bg-blue-100' },
   { icon: Building2, label: 'Department', value: 'Engineering', color: '#6B5FCF', badge: 'bg-violet-100' },
   { icon: UserCheck, label: 'Reporting Manager', value: 'Akash Mehta', color: '#059669', badge: 'bg-emerald-100' },
-  { icon: CalendarDays, label: 'Date of Joining', value: '12 Mar 2024', color: '#D9A53B', badge: 'bg-amber-100' },
-  { icon: Clock, label: 'Employee Type', value: 'Full-time', color: '#0EA5E9', badge: 'bg-sky-100' },
+  { icon: CalendarDays, label: 'Date of Joining', value: '12 Mar 2024', color: '#D9A53B', badge: 'bg-amber-100', type: 'date' },
+  { icon: Clock, label: 'Employee Type', value: 'Full-time', color: '#0EA5E9', badge: 'bg-sky-100', type: 'select', options: ['Full-time', 'Part-time', 'Contract', 'Intern'] },
   { icon: MapPin, label: 'Work Location', value: 'Bengaluru HQ', color: '#E0785C', badge: 'bg-rose-100' },
 ];
 

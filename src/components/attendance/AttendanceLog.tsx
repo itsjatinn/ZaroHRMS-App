@@ -40,7 +40,7 @@ const LOG: {
 
 export default function AttendanceLog() {
   return (
-    <View style={cardShadow} className="rounded-2xl bg-white p-5">
+    <View style={cardShadow} className="rounded-[24px] border border-slate-100 bg-white p-5">
       {/* Header */}
       <View className="flex-row items-center justify-between">
         <Text className="text-base font-bold text-ink">Recent Activity</Text>

@@ -5,7 +5,7 @@ import BackButton from '../../src/components/BackButton';
 
 export default function Regularize() {
   return (
-    <SafeAreaView edges={['top', 'left', 'right']} className="flex-1 bg-[#F4F3EF]">
+    <SafeAreaView edges={['top', 'left', 'right']} className="flex-1 bg-canvas">
       <BackButton title="Regularize" />
       <View className="flex-1 items-center justify-center">
         <Text className="text-xl font-bold text-ink">Regularize</Text>

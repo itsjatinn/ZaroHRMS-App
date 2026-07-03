@@ -3,7 +3,6 @@ import {
   Briefcase,
   Building2,
   CalendarDays,
-  CircleUser,
   CreditCard,
   FileText,
   Globe,
@@ -17,26 +16,29 @@ import {
 import type { LucideIcon } from 'lucide-react-native';
 
 import type { InfoItem } from './profileData';
-import { JOB_INFO, PERSONAL_INFO } from './profileData';
+import { PERSONAL_INFO } from './profileData';
 
 export type ProfileSection = {
   key: string; // route param
   label: string;
   icon: LucideIcon;
-  locked?: boolean;
+  /** Icon-chip tint: [icon color, chip background]. */
+  color: string;
+  chip: string;
+  /** Read-only for employees (HR-owned) — hides the edit controls. */
+  readOnly?: boolean;
 };
 
 // The profile section menu (matches the design).
 export const PROFILE_SECTIONS: ProfileSection[] = [
-  { key: 'overview', label: 'Overview', icon: CircleUser },
-  { key: 'personal-info', label: 'Personal info', icon: User },
-  { key: 'address', label: 'Address', icon: MapPin },
-  { key: 'bank-identity', label: 'Bank & identity', icon: CreditCard, locked: true },
-  { key: 'family-nominees', label: 'Family & nominees', icon: Users },
-  { key: 'education', label: 'Education', icon: GraduationCap },
-  { key: 'experience', label: 'Experience', icon: Briefcase },
-  { key: 'documents', label: 'Documents', icon: FileText },
-  { key: 'compensation', label: 'Compensation', icon: Wallet, locked: true },
+  { key: 'personal-info', label: 'Personal info', icon: User, color: '#6B5FCF', chip: 'bg-violet-100' },
+  { key: 'address', label: 'Address', icon: MapPin, color: '#059669', chip: 'bg-emerald-100' },
+  { key: 'bank-identity', label: 'Bank & identity', icon: CreditCard, color: '#0EA5E9', chip: 'bg-sky-100' },
+  { key: 'family-nominees', label: 'Family & nominees', icon: Users, color: '#E0785C', chip: 'bg-rose-100' },
+  { key: 'education', label: 'Education', icon: GraduationCap, color: '#D9A53B', chip: 'bg-amber-100' },
+  { key: 'experience', label: 'Experience', icon: Briefcase, color: '#2563EB', chip: 'bg-blue-100' },
+  { key: 'documents', label: 'Documents', icon: FileText, color: '#6B5FCF', chip: 'bg-violet-100' },
+  { key: 'compensation', label: 'Compensation', icon: Wallet, color: '#059669', chip: 'bg-emerald-100', readOnly: true },
 ];
 
 type Card = { title: string; items: InfoItem[] };
@@ -47,18 +49,26 @@ const VIOLET = { color: '#6B5FCF', badge: 'bg-violet-100' };
 const AMBER = { color: '#D9A53B', badge: 'bg-amber-100' };
 const ROSE = { color: '#E0785C', badge: 'bg-rose-100' };
 
+// Blank templates used when the user taps "Add" on a repeatable section.
+export const EDUCATION_TEMPLATE: Card = {
+  title: 'New qualification',
+  items: [
+    { icon: GraduationCap, label: 'Institution', value: '—', ...BLUE },
+    { icon: CalendarDays, label: 'Year', value: '—', ...AMBER },
+    { icon: BadgeCheck, label: 'Grade', value: '—', ...GREEN },
+  ],
+};
+
+export const EXPERIENCE_TEMPLATE: Card = {
+  title: 'New experience',
+  items: [
+    { icon: CalendarDays, label: 'Duration', value: '—', ...AMBER },
+    { icon: MapPin, label: 'Location', value: '—', ...ROSE },
+  ],
+};
+
 // Content rendered for each (unlocked) section.
 export const SECTION_CARDS: Record<string, Card[]> = {
-  overview: [
-    {
-      title: 'At a glance',
-      items: [
-        ...JOB_INFO.slice(0, 4),
-        PERSONAL_INFO[0],
-        PERSONAL_INFO[1],
-      ],
-    },
-  ],
   'personal-info': [{ title: 'Personal Information', items: PERSONAL_INFO }],
   address: [
     {
@@ -87,7 +97,7 @@ export const SECTION_CARDS: Record<string, Card[]> = {
       items: [
         { icon: User, label: 'Father', value: 'Ramesh Verma', ...BLUE },
         { icon: User, label: 'Mother', value: 'Sunita Verma', ...VIOLET },
-        { icon: Heart, label: 'Marital Status', value: 'Single', ...ROSE },
+        { icon: Heart, label: 'Marital Status', value: 'Single', ...ROSE, type: 'select', options: ['Single', 'Married', 'Divorced', 'Widowed'] },
       ],
     },
     {
@@ -133,14 +143,41 @@ export const SECTION_CARDS: Record<string, Card[]> = {
       ],
     },
   ],
-  documents: [
+  // 'documents' is rendered by DocumentsCard (upload/view/replace), not here.
+  'bank-identity': [
     {
-      title: 'Submitted Documents',
+      title: 'Bank Account',
       items: [
-        { icon: FileText, label: 'Offer Letter', value: 'Verified', ...GREEN },
-        { icon: FileText, label: 'ID Proof (Aadhaar)', value: 'Verified', ...GREEN },
-        { icon: FileText, label: 'PAN Card', value: 'Verified', ...GREEN },
-        { icon: FileText, label: 'Degree Certificate', value: 'Pending', ...AMBER },
+        { icon: Building2, label: 'Bank Name', value: 'HDFC Bank', ...BLUE },
+        { icon: CreditCard, label: 'Account Number', value: 'XXXX XXXX 4821', ...VIOLET },
+        { icon: CreditCard, label: 'IFSC Code', value: 'HDFC0001234', ...GREEN },
+        { icon: User, label: 'Account Holder', value: 'Vishal Verma', ...AMBER },
+      ],
+    },
+    {
+      title: 'Identity',
+      items: [
+        { icon: BadgeCheck, label: 'PAN', value: 'ABCDE1234F', ...BLUE },
+        { icon: BadgeCheck, label: 'Aadhaar', value: 'XXXX XXXX 9012', ...GREEN },
+        { icon: BadgeCheck, label: 'UAN (PF)', value: '100987654321', ...ROSE },
+      ],
+    },
+  ],
+  compensation: [
+    {
+      title: 'Salary Structure',
+      items: [
+        { icon: Wallet, label: 'CTC (Annual)', value: '₹ 18,00,000', ...BLUE },
+        { icon: Wallet, label: 'Basic', value: '₹ 60,000 / mo', ...VIOLET },
+        { icon: Wallet, label: 'HRA', value: '₹ 24,000 / mo', ...GREEN },
+        { icon: Wallet, label: 'Special Allowance', value: '₹ 36,000 / mo', ...AMBER },
+      ],
+    },
+    {
+      title: 'Payout',
+      items: [
+        { icon: CalendarDays, label: 'Pay Cycle', value: 'Monthly', ...ROSE },
+        { icon: CreditCard, label: 'Mode', value: 'Bank Transfer', ...BLUE },
       ],
     },
   ],

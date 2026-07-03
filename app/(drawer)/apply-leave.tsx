@@ -148,7 +148,7 @@ export default function LeaveApplicationScreen() {
   };
 
   return (
-    <SafeAreaView edges={['top', 'left', 'right']} className="flex-1 bg-[#F4F3EF]">
+    <SafeAreaView edges={['top', 'left', 'right']} className="flex-1 bg-canvas">
       <BackButton title="Apply Leave" />
       <ScrollView
         ref={scrollRef}

@@ -3,8 +3,6 @@ import { useRouter } from 'expo-router';
 import { Fragment } from 'react';
 import { Pressable, Text, View } from 'react-native';
 
-import { cardShadow } from './shadow';
-
 const FEATURED = {
   day: '23',
   month: 'JUN',
@@ -54,8 +52,7 @@ export default function UpcomingHolidaysCard() {
   const router = useRouter();
 
   return (
-    <View style={cardShadow} className="rounded-3xl bg-white p-6">
-      {/* Header */}
+    <View className="rounded-[24px] border border-slate-100 bg-white px-5 py-5">
       <View className="flex-row items-center justify-between">
         <Text className="text-base font-bold text-ink">Upcoming holidays</Text>
         <Pressable
@@ -68,9 +65,8 @@ export default function UpcomingHolidaysCard() {
         </Pressable>
       </View>
 
-      {/* Featured holiday */}
-      <View className="mt-6 flex-row items-center gap-4 rounded-2xl bg-[#FBEDE7] p-3.5">
-        <View className="h-16 w-16 items-center justify-center rounded-xl border border-rose-100 bg-white">
+      <View className="mt-5 flex-row items-center gap-4 rounded-2xl border-l-4 border-[#E0785C] bg-[#FBEDE7] px-4 py-3.5">
+        <View className="h-14 w-14 items-center justify-center rounded-xl bg-white">
           <Text className="text-2xl font-bold text-ink">{FEATURED.day}</Text>
           <Text className="text-[11px] font-semibold uppercase text-slate-400">
             {FEATURED.month}
@@ -84,26 +80,23 @@ export default function UpcomingHolidaysCard() {
             {FEATURED.title}
           </Text>
           <View className="mt-1.5 flex-row items-center gap-2">
-            <View className="rounded-md bg-[#F6D8CE] px-2 py-0.5">
-              <Text className="text-xs font-semibold text-[#C0552F]">
-                {FEATURED.tag}
-              </Text>
-            </View>
+            <Text className="text-xs font-semibold text-[#C0552F]">
+              {FEATURED.tag}
+            </Text>
             <Text className="text-xs text-slate-400">· {FEATURED.note}</Text>
           </View>
         </View>
       </View>
 
-      {/* Holiday list */}
-      <View className="mt-6">
+      <View className="mt-5">
         {HOLIDAYS.map((h, i) => (
           <Fragment key={h.title}>
             {i > 0 && (
-              <View className="my-4 border-b border-dashed border-slate-200" />
+              <View className="my-3 border-b border-slate-100" />
             )}
             <View className="flex-row items-center gap-4">
               <View
-                className="h-14 w-14 items-center justify-center rounded-xl"
+                className="h-12 w-12 items-center justify-center rounded-xl"
                 style={{ backgroundColor: h.boxBg }}
               >
                 <Text

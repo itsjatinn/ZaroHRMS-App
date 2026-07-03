@@ -6,8 +6,8 @@ import { FEATURED_HOLIDAY as F } from './holidaysData';
 // Highlighted card for the next upcoming holiday.
 export default function FeaturedHolidayCard() {
   return (
-    <View style={cardShadow} className="flex-row items-center gap-4 rounded-2xl bg-[#FBEDE7] p-4">
-      <View className="h-16 w-16 items-center justify-center rounded-xl border border-rose-100 bg-white">
+    <View style={cardShadow} className="flex-row items-center gap-4 rounded-[24px] border border-[#F4D9CE] bg-[#FBEDE7] p-4">
+      <View className="h-16 w-16 items-center justify-center rounded-2xl border border-rose-100 bg-white">
         <Text className="text-2xl font-bold text-ink">{F.day}</Text>
         <Text className="text-[11px] font-semibold uppercase text-slate-400">{F.month}</Text>
       </View>

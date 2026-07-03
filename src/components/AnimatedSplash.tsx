@@ -1,8 +1,9 @@
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
-import { Image, StyleSheet } from 'react-native';
+import { Dimensions, Image, StyleSheet, View } from 'react-native';
 import Animated, {
   Easing,
+  interpolate,
   runOnJS,
   useAnimatedStyle,
   useSharedValue,
@@ -11,56 +12,111 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 
-const LOGO_SIZE = 140;
+import {
+  resetSplashHandoff,
+  SLIDE_DURATION,
+  SLIDE_EASING,
+  splashExiting,
+} from './auth/authTiming';
+
+const { width: SCREEN_W } = Dimensions.get('window');
+const LOGO_SIZE = 120;
 
 type Props = {
   /** Flip to true once fonts + session are ready; the splash then plays out. */
   isAppReady: boolean;
+  /**
+   * When true, exit with the page-turn slide-left (the auth card slides in to
+   * meet it). When false (already signed in → home), fade out instead, since
+   * there's no sliding screen to hand off to.
+   */
+  slideExit?: boolean;
   /** Called after the exit animation finishes, so the parent can unmount us. */
   onFinish: () => void;
 };
 
 /**
- * Full-screen branded splash on the primary navy background. It covers the app
- * while it boots, plays a smooth logo opening, holds, then closes by fading the
- * whole layer out — revealing the app underneath.
+ * Full-screen branded splash that covers the app while it boots, then hands off
+ * to the auth flow with a "page-turn": the logo eases in with a soft spring
+ * settle, holds for a beat, then the whole layer slides off to the LEFT while
+ * the auth card slides in from the RIGHT underneath.
+ *
+ * The two halves stay in lockstep because both use the shared SLIDE_DURATION /
+ * SLIDE_EASING from authTiming — the splash owns the left half of the motion,
+ * the auth card owns the right half.
+ *
+ * It is rendered on top of the navigator and stays fully opaque until the exit
+ * so there is never a flash of the app underneath.
  */
-export default function AnimatedSplash({ isAppReady, onFinish }: Props) {
-  const containerOpacity = useSharedValue(1);
-  const logoOpacity = useSharedValue(0);
-  const logoScale = useSharedValue(0.82);
+export default function AnimatedSplash({ isAppReady, slideExit = true, onFinish }: Props) {
+  // Entrance drivers, kept separate so the fade and the settle can use their
+  // own curves (a spring for the scale reads far more premium than one linear
+  // opacity+scale ramp).
+  const opacity = useSharedValue(0);
+  const scale = useSharedValue(0.82);
+
+  // Exit driver (0 -> 1). Drives either a slide-left (auth) or a fade-out (app).
+  const exit = useSharedValue(0);
 
   useEffect(() => {
     if (!isAppReady) return;
 
-    // Opening — logo fades and gently scales up.
-    logoOpacity.value = withTiming(1, {
-      duration: 700,
-      easing: Easing.out(Easing.cubic),
-    });
-    logoScale.value = withSpring(1, { damping: 16, stiffness: 65, mass: 1.1 });
+    // Fresh handoff each launch (also covers fast refresh).
+    resetSplashHandoff();
 
-    // Closing — after a short hold, fade the whole layer out.
-    const HOLD = 2200;
-    logoScale.value = withDelay(
-      HOLD,
-      withTiming(1.05, { duration: 650, easing: Easing.in(Easing.cubic) }),
+    // Entrance: gentle fade paired with a low-stiffness spring that eases up and
+    // barely overshoots before settling — calm, weighty, expensive-feeling.
+    opacity.value = withTiming(1, {
+      duration: 650,
+      easing: Easing.out(Easing.quad),
+    });
+    scale.value = withSpring(1, {
+      damping: 14,
+      stiffness: 90,
+      mass: 1,
+      overshootClamping: false,
+    });
+
+    // Hold on the brand, then play the exit.
+    const HOLD = 1400;
+    const EXIT_START = 650 + HOLD;
+
+    // Only the slide handoff drives the auth card; fire its trigger just as the
+    // slide begins. (Skipped on the fade exit — no card to meet.)
+    const trigger = slideExit
+      ? setTimeout(() => {
+          splashExiting.value = 1;
+        }, EXIT_START)
+      : undefined;
+
+    exit.value = withDelay(
+      EXIT_START,
+      withTiming(
+        1,
+        { duration: SLIDE_DURATION, easing: SLIDE_EASING },
+        (finished) => {
+          if (finished) runOnJS(onFinish)();
+        },
+      ),
     );
-    containerOpacity.value = withDelay(
-      HOLD,
-      withTiming(0, { duration: 650, easing: Easing.in(Easing.cubic) }, (finished) => {
-        if (finished) runOnJS(onFinish)();
-      }),
-    );
+
+    return () => {
+      if (trigger) clearTimeout(trigger);
+    };
   }, [isAppReady]);
 
-  const containerStyle = useAnimatedStyle(() => ({
-    opacity: containerOpacity.value,
-  }));
+  const containerStyle = useAnimatedStyle(() =>
+    slideExit
+      ? { transform: [{ translateX: interpolate(exit.value, [0, 1], [0, -SCREEN_W]) }] }
+      : { opacity: 1 - exit.value },
+  );
 
   const logoStyle = useAnimatedStyle(() => ({
-    opacity: logoOpacity.value,
-    transform: [{ scale: logoScale.value }],
+    // On the fade exit, let the logo drift up a touch for a premium settle.
+    opacity: opacity.value,
+    transform: [
+      { scale: scale.value * (slideExit ? 1 : 1 + exit.value * 0.06) },
+    ],
   }));
 
   return (
@@ -69,11 +125,16 @@ export default function AnimatedSplash({ isAppReady, onFinish }: Props) {
       pointerEvents="none"
     >
       <StatusBar style="light" />
-      <Animated.Image
-        source={require('../../assets/logo.png')}
-        style={[styles.logo, logoStyle]}
-        resizeMode="contain"
-      />
+
+      <View style={styles.content}>
+        <Animated.View style={logoStyle}>
+          <Image
+            source={require('../../assets/logo.png')}
+            style={styles.logo}
+            resizeMode="contain"
+          />
+        </Animated.View>
+      </View>
     </Animated.View>
   );
 }
@@ -81,6 +142,10 @@ export default function AnimatedSplash({ isAppReady, onFinish }: Props) {
 const styles = StyleSheet.create({
   container: {
     backgroundColor: '#14323F',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  content: {
     alignItems: 'center',
     justifyContent: 'center',
   },

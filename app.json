@@ -40,7 +40,10 @@
         }
       ],
       "expo-router",
-      "expo-font"
+      "expo-font",
+      "@react-native-community/datetimepicker",
+      "expo-build-properties",
+      "./plugins/withDatePickerColor"
     ]
   }
 }

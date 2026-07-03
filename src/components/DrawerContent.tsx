@@ -31,11 +31,6 @@ const MENU: MenuItem[] = [
     icon: (c) => <Ionicons name="megaphone-outline" size={20} color={c} />,
   },
   {
-    label: 'Requests',
-    route: '/requests',
-    icon: (c) => <Feather name="send" size={20} color={c} />,
-  },
-  {
     label: 'Support',
     route: '/support',
     icon: (c) => <Feather name="help-circle" size={20} color={c} />,
@@ -77,7 +72,7 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
             </View>
 
             {/* Name + employee id pill */}
-            <Text className="mt-4 text-lg font-bold text-white">
+            <Text className="mt-4 text-2xl font-bold text-white">
               {currentUser.name}
             </Text>
             <View className="mt-2 rounded-full bg-white/10 px-3 py-1">
@@ -122,7 +117,7 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
                 >
                   {item.icon(tint)}
                   <Text
-                    className={`flex-1 text-base ${
+                    className={`flex-1 text-lg ${
                       isActive ? 'font-semibold text-[#16202E]' : 'text-white'
                     }`}
                   >
@@ -148,7 +143,7 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
             className="mb-2 flex-row items-center gap-4 rounded-2xl px-4 py-3.5 active:bg-white/10"
           >
             <Feather name="log-out" size={20} color="#FFFFFF" />
-            <Text className="text-base text-white">Sign out</Text>
+            <Text className="text-lg text-white">Sign out</Text>
           </Pressable>
         </View>
       </View>

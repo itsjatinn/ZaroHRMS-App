@@ -13,7 +13,7 @@ type Props = {
 // One titled card listing the documents in a category.
 export default function DocumentSection({ title, docs, onDownload }: Props) {
   return (
-    <View style={cardShadow} className="rounded-2xl bg-white p-5">
+    <View style={cardShadow} className="rounded-[24px] border border-slate-100 bg-white p-5">
       <Text className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
         {title}
       </Text>

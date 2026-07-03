@@ -36,7 +36,7 @@ export default function Settings() {
     ]);
 
   return (
-    <SafeAreaView edges={['top', 'left', 'right']} className="flex-1 bg-[#F4F3EF]">
+    <SafeAreaView edges={['top', 'left', 'right']} className="flex-1 bg-canvas">
       <BackButton title="Settings" />
       <ScrollView
         className="flex-1"
@@ -45,7 +45,7 @@ export default function Settings() {
         showsVerticalScrollIndicator={false}
       >
         {/* Profile */}
-        <View style={cardShadow} className="flex-row items-center gap-4 rounded-2xl bg-white p-5">
+        <View style={cardShadow} className="flex-row items-center gap-4 rounded-[24px] border border-slate-100 bg-white p-5">
           <View className="h-16 w-16 overflow-hidden rounded-2xl border-2 border-[#F5D14E]">
             <Image source={{ uri: currentUser.avatar }} className="h-full w-full" />
           </View>
@@ -64,7 +64,7 @@ export default function Settings() {
         {/* Account */}
         <View>
           <SectionLabel>Account</SectionLabel>
-          <View style={cardShadow} className="rounded-2xl bg-white px-5 py-1">
+          <View style={cardShadow} className="rounded-[24px] border border-slate-100 bg-white px-5 py-1">
             <SettingsRow first icon={User} color="#2563EB" badge="bg-blue-100" label="Edit Profile" onPress={() => soon('Edit profile')} />
             <SettingsRow icon={Lock} color="#6B5FCF" badge="bg-violet-100" label="Change Password" onPress={() => soon('Change password')} />
             <SettingsRow icon={Shield} color="#059669" badge="bg-emerald-100" label="Privacy & Security" onPress={() => soon('Privacy & Security')} />
@@ -74,7 +74,7 @@ export default function Settings() {
         {/* Preferences */}
         <View>
           <SectionLabel>Preferences</SectionLabel>
-          <View style={cardShadow} className="rounded-2xl bg-white px-5 py-1">
+          <View style={cardShadow} className="rounded-[24px] border border-slate-100 bg-white px-5 py-1">
             {/* Notifications toggle */}
             <View className="flex-row items-center gap-3 py-3">
               <View className="h-9 w-9 items-center justify-center rounded-xl bg-amber-100">
@@ -108,7 +108,7 @@ export default function Settings() {
         {/* More */}
         <View>
           <SectionLabel>More</SectionLabel>
-          <View style={cardShadow} className="rounded-2xl bg-white px-5 py-1">
+          <View style={cardShadow} className="rounded-[24px] border border-slate-100 bg-white px-5 py-1">
             <SettingsRow first icon={Info} color="#6B5FCF" badge="bg-violet-100" label="About zaroHRMS" value="v1.0.0" onPress={() => soon('About')} />
           </View>
         </View>
@@ -117,7 +117,7 @@ export default function Settings() {
         <Pressable
           onPress={confirmSignOut}
           style={cardShadow}
-          className="h-12 flex-row items-center justify-center gap-2 rounded-2xl bg-white active:scale-[0.98]"
+          className="h-12 flex-row items-center justify-center gap-2 rounded-2xl border border-slate-100 bg-white active:scale-[0.98]"
         >
           <LogOut size={18} color="#E11D48" />
           <Text className="text-sm font-bold text-[#E11D48]">Sign Out</Text>

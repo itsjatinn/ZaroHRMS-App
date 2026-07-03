@@ -24,7 +24,7 @@ export default function StatCard({
   return (
     <View
       style={cardShadow}
-      className={`rounded-2xl bg-white p-4 ${className}`}
+      className={`rounded-[24px] border border-slate-100 bg-white p-4 ${className}`}
     >
       <View className="flex-row items-start justify-between">
         <Text className="flex-1 pr-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400">

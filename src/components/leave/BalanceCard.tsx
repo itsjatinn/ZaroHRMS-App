@@ -17,7 +17,7 @@ export default function BalanceCard({
   const after = remaining != null ? remaining - daysSelected : null;
 
   return (
-    <View style={cardShadow} className="rounded-2xl bg-[#14323F] p-5">
+    <View style={cardShadow} className="rounded-[24px] border border-white/10 bg-[#14323F] p-5">
       <View className="flex-row items-start justify-between">
         <View className="flex-1 pr-3">
           <Text className="text-base font-bold text-white">

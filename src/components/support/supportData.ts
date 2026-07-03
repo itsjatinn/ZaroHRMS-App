@@ -17,7 +17,6 @@ export const CONTACTS: Contact[] = [
 
 export const FAQS = [
   { q: 'How do I apply for leave?', a: 'Go to the Leave tab and tap "Apply Leave". Pick your dates, leave type, and reason, then submit for approval.' },
-  { q: 'When are payslips released?', a: 'Payslips are generated on the last working day of each month and are available under the Payslips tab.' },
   { q: 'How do I regularize attendance?', a: 'Open the Attendance page or use the Regularize quick action, then submit the corrected punch time with a reason.' },
   { q: 'Who approves my requests?', a: 'Requests are routed to your reporting manager. You can track their status under the Requests page.' },
 ];

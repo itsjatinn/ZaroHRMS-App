@@ -1,4 +1,5 @@
 import { useRouter } from 'expo-router';
+import { Eye, EyeOff } from 'lucide-react-native';
 import { useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 
@@ -48,9 +49,9 @@ export default function ResetPasswordScreen() {
     <AuthShell
       title="Set a new password"
       subtitle="Enter a new password for your account. The link expires in 1 hour."
-      showWordmark={false}
+      visualSource={require('../../assets/reset_pass.png')}
     >
-      <View className="gap-5">
+      <View className="gap-4">
         <AuthField
           label="New password"
           value={password}
@@ -65,13 +66,17 @@ export default function ResetPasswordScreen() {
           editable={!loading}
           error={errors.password}
           rightSlot={
-            <Pressable onPress={() => setShowPassword((v) => !v)} hitSlop={8}>
-              <Text
-                className="text-sm text-ink"
-                style={{ fontFamily: font.semibold }}
-              >
-                {showPassword ? 'Hide' : 'Show'}
-              </Text>
+            <Pressable
+              onPress={() => setShowPassword((v) => !v)}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}
+            >
+              {showPassword ? (
+                <EyeOff size={20} color="#48626E" />
+              ) : (
+                <Eye size={20} color="#48626E" />
+              )}
             </Pressable>
           }
         />

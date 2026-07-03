@@ -1,11 +1,17 @@
 import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useEffect, useState } from 'react';
+import type { ViewStyle } from 'react-native';
 import { Pressable, Text, View } from 'react-native';
-
-import { cardShadow } from './shadow';
 
 const YELLOW = '#F5D14E';
 const NAVY = '#14323F';
+const PUNCH_CARD_SHADOW: ViewStyle = {
+  shadowColor: NAVY,
+  shadowOffset: { width: 0, height: 6 },
+  shadowOpacity: 0.08,
+  shadowRadius: 12,
+  elevation: 3,
+};
 
 function pad(n: number) {
   return n.toString().padStart(2, '0');
@@ -27,7 +33,7 @@ export default function ClockInCard() {
   const time = `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
 
   return (
-    <View style={cardShadow} className="rounded-3xl bg-[#14323F] p-6">
+    <View style={PUNCH_CARD_SHADOW} className="rounded-3xl bg-[#14323F] p-6">
       <View className="flex-row items-center">
         {/* Left: date, status, time */}
         <View className="flex-1 pr-4">
@@ -67,7 +73,7 @@ export default function ClockInCard() {
 
         {/* Right: dashed ring + yellow punch button */}
         <View
-          className="items-center justify-center rounded-full p-2"
+          className="items-center justify-center rounded-full p-1"
           style={{
             borderWidth: 2,
             borderColor: 'rgba(255,255,255,0.25)',

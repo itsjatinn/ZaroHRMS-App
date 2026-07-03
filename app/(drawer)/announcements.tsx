@@ -12,7 +12,7 @@ export default function Announcements() {
   const insets = useSafeAreaInsets();
 
   return (
-    <SafeAreaView edges={['top', 'left', 'right']} className="flex-1 bg-[#F4F3EF]">
+    <SafeAreaView edges={['top', 'left', 'right']} className="flex-1 bg-canvas">
       <BackButton title="Announcements" />
       <ScrollView
         className="flex-1"

@@ -1,7 +1,5 @@
 import { Text, View } from 'react-native';
 
-import { cardShadow } from './shadow';
-
 const AVATARS = [
   { initials: 'AK', bg: 'bg-indigo-500' },
   { initials: 'RN', bg: 'bg-rose-500' },
@@ -11,8 +9,7 @@ const AVATARS = [
 
 export default function TeamTodayCard() {
   return (
-    <View style={cardShadow} className="flex-1 rounded-3xl bg-white p-5">
-      {/* Title + status pill */}
+    <View className="flex-1 rounded-[22px] border border-slate-100 bg-white p-4">
       <View className="flex-row items-center justify-between">
         <Text className="text-sm font-semibold text-ink">Team today</Text>
         <View className="rounded-full bg-slate-100 px-2.5 py-1">
@@ -20,7 +17,6 @@ export default function TeamTodayCard() {
         </View>
       </View>
 
-      {/* Overlapping avatars */}
       <View className="mt-4 flex-row">
         {AVATARS.map((avatar, index) => (
           <View
@@ -37,7 +33,6 @@ export default function TeamTodayCard() {
         </View>
       </View>
 
-      {/* Footer note */}
       <Text className="mt-3 text-xs text-slate-500">
         <Text className="font-semibold text-ink">Priya</Text> is on leave today ·
         returns Apr 28
