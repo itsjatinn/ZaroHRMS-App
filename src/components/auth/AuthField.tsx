@@ -11,13 +11,13 @@ type AuthFieldProps = TextInputProps & {
   error?: string;
 };
 
-// Primary colour used for the focused state (the app's ink).
-const INK = '#14323F';
+const INK = '#14323F'; // focused state
 const IDLE_BORDER = '#CBD5E1'; // slate-300
 const ERROR = '#F43F5E'; // rose-500
 
-// Floating-label outlined field: the label sits notched into the top border of
-// a rounded box, and the border + label pick up the primary colour on focus
+// Floating-label outlined field. The label sits notched into the top border of
+// a rounded box — the notch is a small white-backed pill that covers the border
+// line behind the label. Border + label pick up the primary colour on focus
 // (rose on error). The right slot holds an icon such as the password toggle.
 export default function AuthField({
   label,
@@ -25,35 +25,47 @@ export default function AuthField({
   error,
   onFocus,
   onBlur,
+  style,
   ...inputProps
 }: AuthFieldProps) {
   const [focused, setFocused] = useState(false);
 
-  const color = error ? ERROR : focused ? INK : IDLE_BORDER;
+  const borderColor = error ? ERROR : focused ? INK : IDLE_BORDER;
   const labelColor = error ? ERROR : focused ? INK : '#64748B'; // slate-500
+  const borderWidth = focused || error ? 2 : 1.5;
 
   return (
     <View>
       <View
-        className="h-16 flex-row items-center rounded-2xl bg-white px-4"
-        style={{ borderWidth: focused || error ? 2 : 1.5, borderColor: color }}
+        className="h-14 flex-row items-center rounded-2xl bg-white px-4"
+        style={{ borderWidth, borderColor }}
       >
-        {/* Notched floating label — the white background "cuts" the border line */}
+        {/* Notched floating label. Its background is split so the top half
+            matches the page (canvas) and the bottom half matches the field
+            (white) — the label straddles the border line and blends into both. */}
         <View
-          className="absolute -top-2.5 left-3 flex-row bg-white px-1.5"
+          className="absolute -top-2.5 left-3 px-1.5"
           pointerEvents="none"
         >
+          {/* Two-tone backing: top half = page bg, bottom half = field bg */}
+          <View className="absolute inset-0 overflow-hidden rounded-[4px]">
+            <View className="h-1/2 w-full bg-canvas" />
+            <View className="h-1/2 w-full bg-white" />
+          </View>
           <Text
             className="text-sm"
-            style={{ color: labelColor, fontFamily: font.semibold }}
+            style={{ color: labelColor, fontFamily: font.semibold, lineHeight: 18 }}
           >
             {label}
           </Text>
         </View>
 
         <TextInput
-          className="flex-1 text-base text-ink"
+          className="h-full flex-1 py-0 text-base text-ink"
+          textAlignVertical="center"
+          underlineColorAndroid="transparent"
           placeholderTextColor="#94A3B8"
+          style={[{ fontFamily: font.regular }, style]}
           onFocus={(e) => {
             setFocused(true);
             onFocus?.(e);

@@ -44,7 +44,7 @@ export default function AuthButton({
           clip the last character (e.g. "Sign in" -> "Sign ir"). */}
       <Text
         className={`text-base ${labelColor}`}
-        style={{ fontFamily: font.bold, paddingHorizontal: 12 }}
+        style={{ fontFamily: font.bold, lineHeight: 22, paddingHorizontal: 12 }}
       >
         {label}
       </Text>

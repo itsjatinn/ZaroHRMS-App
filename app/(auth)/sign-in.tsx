@@ -98,29 +98,26 @@ export default function SignInScreen() {
             read-only summary row with an edit affordance. */}
         <StaggerItem>
           {onPassword ? (
-            <View className="h-16 flex-row items-center justify-between rounded-2xl border-[1.5px] border-slate-300 bg-white px-4">
-              {/* Notched label, matching AuthField */}
-              <View className="absolute -top-2.5 left-3 bg-white px-1.5" pointerEvents="none">
-                <Text className="text-sm text-slate-500" style={{ fontFamily: font.semibold }}>
-                  E-mail
-                </Text>
-              </View>
-              <Text className="flex-1 text-base text-ink" numberOfLines={1}>
-                {email}
-              </Text>
-              <Pressable
-                onPress={editEmail}
-                hitSlop={8}
-                className="ml-3 flex-row items-center gap-1"
-                accessibilityRole="button"
-                accessibilityLabel="Edit email"
-              >
-                <Pencil size={15} color="#14323F" />
-                <Text className="text-sm text-ink" style={{ fontFamily: font.semibold }}>
-                  Edit
-                </Text>
-              </Pressable>
-            </View>
+            <AuthField
+              label="E-mail"
+              value={email}
+              editable={false}
+              selectTextOnFocus={false}
+              rightSlot={
+                <Pressable
+                  onPress={editEmail}
+                  hitSlop={8}
+                  className="flex-row items-center gap-1"
+                  accessibilityRole="button"
+                  accessibilityLabel="Edit email"
+                >
+                  <Pencil size={15} color="#14323F" />
+                  <Text className="text-sm text-ink" style={{ fontFamily: font.semibold }}>
+                    Edit
+                  </Text>
+                </Pressable>
+              }
+            />
           ) : (
             <AuthField
               label="E-mail"
@@ -185,7 +182,7 @@ export default function SignInScreen() {
             <Pressable
               onPress={() => setRememberMe((v) => !v)}
               hitSlop={8}
-              className="flex-row items-center gap-2"
+              className="min-w-0 flex-shrink flex-row items-center gap-2"
               accessibilityRole="checkbox"
               accessibilityState={{ checked: rememberMe }}
             >
@@ -196,14 +193,22 @@ export default function SignInScreen() {
               >
                 {rememberMe ? <Check size={13} color="#FFFFFF" strokeWidth={3} /> : null}
               </View>
-              <Text className="text-sm text-slate-600" style={{ fontFamily: font.medium }}>
+              <Text
+                className="min-w-0 flex-shrink text-sm text-slate-600"
+                numberOfLines={1}
+                style={{ fontFamily: font.medium, lineHeight: 20, paddingRight: 2 }}
+              >
                 Remember me
               </Text>
             </Pressable>
 
             <Link href="/forgot-password" asChild>
-              <Pressable hitSlop={8}>
-                <Text className="text-sm text-ink" style={{ fontFamily: font.semibold }}>
+              <Pressable hitSlop={8} className="ml-3 shrink-0">
+                <Text
+                  className="text-sm text-ink"
+                  numberOfLines={1}
+                  style={{ fontFamily: font.semibold, lineHeight: 20, paddingHorizontal: 2 }}
+                >
                   Forgot password?
                 </Text>
               </Pressable>
