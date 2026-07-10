@@ -20,12 +20,6 @@ function getGreeting() {
   return 'Good Evening';
 }
 
-const TODAY = new Date().toLocaleDateString('en-US', {
-  weekday: 'long',
-  month: 'short',
-  day: 'numeric',
-});
-
 const DURATION = 320;
 const EASING = Easing.inOut(Easing.cubic);
 
@@ -99,10 +93,7 @@ export default function Header() {
       {/* Flexible middle: greeting (collapsed) with the search bar layered on top */}
       <View className="min-w-0 flex-1 justify-center">
         <Animated.View style={greetingStyle} pointerEvents={searchOpen ? 'none' : 'auto'}>
-          <Text className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-            {TODAY}
-          </Text>
-          <Text numberOfLines={1} className="mt-0.5 text-xl font-bold text-ink">
+          <Text numberOfLines={1} className="text-xl font-bold text-ink">
             {getGreeting()}, {firstName}
           </Text>
         </Animated.View>

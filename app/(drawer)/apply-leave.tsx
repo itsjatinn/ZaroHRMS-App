@@ -1,6 +1,5 @@
 import * as ImagePicker from 'expo-image-picker';
 import { useFocusEffect } from 'expo-router';
-import { Calendar, Coffee, Gift, Smile } from 'lucide-react-native';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Alert,
@@ -13,9 +12,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import BackButton from '../../src/components/BackButton';
 import BalanceCard from '../../src/components/leave/BalanceCard';
-import CalendarPicker from '../../src/components/leave/Calendar';
+import BalanceTile from '../../src/components/leave/BalanceTile';
 import LeaveForm from '../../src/components/leave/LeaveForm';
-import StatCard from '../../src/components/leave/StatCard';
 import {
   LEAVE_TYPES,
   daysBetween,
@@ -24,38 +22,53 @@ import {
   type LeaveType,
 } from '../../src/components/leave/leaveData';
 
-// Top stats row config (mirrors the leave balances).
+// Top balance tiles (mirrors the leave balances).
 const STATS = [
-  { label: 'Annual Leave', value: 6, icon: Calendar, color: '#2563EB', badge: 'bg-blue-100' },
-  { label: 'Sick Leave', value: 8, icon: Coffee, color: '#059669', badge: 'bg-emerald-100' },
-  { label: 'Paternity Leave', value: 7, icon: Smile, color: '#EA7317', badge: 'bg-orange-100' },
-  { label: 'Casual Leave', value: 10, icon: Gift, color: '#E11D48', badge: 'bg-rose-100' },
+  { label: 'Annual', value: 6, accent: '#2563EB' },
+  { label: 'Sick', value: 8, accent: '#059669' },
+  { label: 'Paternity', value: 7, accent: '#EA7317' },
+  { label: 'Casual', value: 10, accent: '#E11D48' },
 ];
+
+const REASON_KEYBOARD_OFFSET = 85;
 
 export default function LeaveApplicationScreen() {
   const { width } = useWindowDimensions();
   const isWide = width >= 720; // two-column / 4-up layout above this width
   const scrollRef = useRef<ScrollView>(null);
+  const reasonTargetRef = useRef<number | null>(null);
   // Bottom padding equal to the keyboard height gives the form room to scroll
   // the Reason box clear of the keyboard.
   const [keyboardHeight, setKeyboardHeight] = useState(0);
 
+  const scrollReasonToKeyboard = useCallback((target = reasonTargetRef.current) => {
+    if (!target) return;
+    setTimeout(() => {
+      scrollRef.current
+        ?.getScrollResponder()
+        ?.scrollResponderScrollNativeHandleToKeyboard(
+          target,
+          REASON_KEYBOARD_OFFSET,
+          true,
+        );
+    }, 80);
+  }, []);
+
   useEffect(() => {
-    // Keyboard opens (Reason focused) -> make room + scroll the form up.
+    // Keyboard opens (Reason focused) -> make room + place the field above it.
     const show = Keyboard.addListener('keyboardDidShow', (e) => {
       setKeyboardHeight(e.endCoordinates.height);
-      setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 60);
+      scrollReasonToKeyboard();
     });
-    // Keyboard closes -> remove the room + settle back down at the form.
+    // Keyboard closes -> remove the extra room so the form settles back down.
     const hide = Keyboard.addListener('keyboardDidHide', () => {
       setKeyboardHeight(0);
-      setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 60);
     });
     return () => {
       show.remove();
       hide.remove();
     };
-  }, []);
+  }, [scrollReasonToKeyboard]);
 
   // Safety net: re-entering the screen resets scroll + padding so it never
   // opens stuck in a scrolled-down state.
@@ -67,8 +80,9 @@ export default function LeaveApplicationScreen() {
   );
 
   // Immediate nudge the moment Reason is focused (before the keyboard event).
-  const handleReasonFocus = () => {
-    setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 120);
+  const handleReasonFocus = (target: number | null) => {
+    reasonTargetRef.current = target;
+    scrollReasonToKeyboard(target);
   };
 
   // ---- Form state ----
@@ -83,17 +97,15 @@ export default function LeaveApplicationScreen() {
 
   // Days requested, adjusting half-days at either end.
   let daysSelected = daysBetween(fromDate, toDate);
-  if (fromDate && fromDuration === 'Half Day') daysSelected -= 0.5;
-  if (toDate && !isSameDay(fromDate, toDate) && toDuration === 'Half Day') {
-    daysSelected -= 0.5;
+  if (fromDate && toDate && isSameDay(fromDate, toDate)) {
+    if (fromDuration === 'Half Day' || toDuration === 'Half Day') {
+      daysSelected = 0.5;
+    }
+  } else {
+    if (fromDate && fromDuration === 'Half Day') daysSelected -= 0.5;
+    if (toDate && toDuration === 'Half Day') daysSelected -= 0.5;
   }
   daysSelected = Math.max(daysSelected, 0);
-
-  // Calendar selection auto-fills From / To.
-  const handleRange = (start: Date | null, end: Date | null) => {
-    setFromDate(start);
-    setToDate(end);
-  };
 
   const handleSelectType = (label: string) => {
     const found = LEAVE_TYPES.find((t) => t.short === label) ?? null;
@@ -115,17 +127,6 @@ export default function LeaveApplicationScreen() {
     } catch {
       Alert.alert('Could not open the file picker.');
     }
-  };
-
-  const clearForm = () => {
-    setLeaveType(null);
-    setFromDate(null);
-    setToDate(null);
-    setFromDuration('Full Day');
-    setToDuration('Full Day');
-    setReason('');
-    setAttachment(null);
-    setAttempted(false);
   };
 
   const applyLeave = () => {
@@ -158,31 +159,26 @@ export default function LeaveApplicationScreen() {
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        {/* 1) Stats row — 4-up on wide screens, 2x2 on narrow */}
-        <View className="flex-row flex-wrap gap-3">
+        {/* 1) Balance tiles — horizontal scroll */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerClassName="gap-3"
+        >
           {STATS.map((s) => (
-            <StatCard
+            <BalanceTile
               key={s.label}
               label={s.label}
               value={s.value}
-              icon={s.icon}
-              iconColor={s.color}
-              badgeClass={s.badge}
-              className={isWide ? 'flex-1' : 'w-[48%]'}
+              accent={s.accent}
             />
           ))}
-        </View>
+        </ScrollView>
 
         {/* 2) Main area — two columns on wide screens, stacked on narrow */}
         <View className={isWide ? 'flex-row gap-4' : 'gap-4'}>
-          {/* Left column: calendar + balance */}
+          {/* Left column: balance summary */}
           <View className={isWide ? 'flex-1 gap-4' : 'gap-4'}>
-            <CalendarPicker
-              start={fromDate}
-              end={toDate}
-              onSelectRange={handleRange}
-              onClear={() => handleRange(null, null)}
-            />
             <BalanceCard leaveType={leaveType} daysSelected={daysSelected} />
           </View>
 
@@ -193,6 +189,8 @@ export default function LeaveApplicationScreen() {
               onSelectType={handleSelectType}
               fromDate={fromDate}
               toDate={toDate}
+              onFromDate={setFromDate}
+              onToDate={setToDate}
               fromDuration={fromDuration}
               toDuration={toDuration}
               onFromDuration={(d) => setFromDuration(d as Duration)}
@@ -203,7 +201,7 @@ export default function LeaveApplicationScreen() {
               attachment={attachment}
               onPickFile={pickFile}
               attempted={attempted}
-              onClear={clearForm}
+              daysSelected={daysSelected}
               onApply={applyLeave}
             />
           </View>

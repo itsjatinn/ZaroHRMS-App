@@ -1,7 +1,17 @@
-import { CalendarDays, FileText, Paperclip } from 'lucide-react-native';
-import type { ReactNode } from 'react';
-import { Pressable, Text, TextInput, View } from 'react-native';
+import DateTimePicker, {
+  type DateTimePickerEvent,
+} from '@react-native-community/datetimepicker';
+import { CalendarDays, FileText } from 'lucide-react-native';
+import { useRef, useState, type ReactNode } from 'react';
+import {
+  findNodeHandle,
+  Pressable,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 
+import AttachmentField from '../requests/AttachmentField';
 import { cardShadow } from '../shadow';
 import Dropdown from './Dropdown';
 import {
@@ -17,17 +27,19 @@ type LeaveFormProps = {
   onSelectType: (label: string) => void;
   fromDate: Date | null;
   toDate: Date | null;
+  onFromDate: (d: Date) => void;
+  onToDate: (d: Date) => void;
   fromDuration: Duration;
   toDuration: Duration;
   onFromDuration: (d: string) => void;
   onToDuration: (d: string) => void;
   reason: string;
   onReason: (text: string) => void;
-  onReasonFocus?: () => void;
+  onReasonFocus?: (target: number | null) => void;
   attachment: { name: string } | null;
   onPickFile: () => void;
   attempted: boolean; // user pressed Apply at least once
-  onClear: () => void;
+  daysSelected: number;
   onApply: () => void;
 };
 
@@ -41,17 +53,20 @@ function FieldLabel({ children, required }: { children: ReactNode; required?: bo
   );
 }
 
-// Read-only date display (the value is driven by the calendar selection).
+// Tappable date field — opens the native date picker.
 function DateField({
   value,
   error,
+  onPress,
 }: {
   value: Date | null;
   error: boolean;
+  onPress: () => void;
 }) {
   return (
-    <View
-      className={`h-12 flex-1 flex-row items-center gap-2 rounded-xl border bg-white px-3.5 ${
+    <Pressable
+      onPress={onPress}
+      className={`h-12 flex-1 flex-row items-center gap-2 rounded-xl border bg-white px-3.5 active:bg-slate-50 ${
         error ? 'border-red-400' : 'border-slate-200'
       }`}
     >
@@ -59,8 +74,12 @@ function DateField({
       <Text className={value ? 'text-sm text-ink' : 'text-sm text-slate-400'}>
         {value ? formatDate(value) : 'dd/mm/yyyy'}
       </Text>
-    </View>
+    </Pressable>
   );
+}
+
+function formatDays(value: number) {
+  return Number.isInteger(value) ? String(value) : value.toFixed(1);
 }
 
 export default function LeaveForm({
@@ -68,6 +87,8 @@ export default function LeaveForm({
   onSelectType,
   fromDate,
   toDate,
+  onFromDate,
+  onToDate,
   fromDuration,
   toDuration,
   onFromDuration,
@@ -78,10 +99,20 @@ export default function LeaveForm({
   attachment,
   onPickFile,
   attempted,
-  onClear,
+  daysSelected,
   onApply,
 }: LeaveFormProps) {
   const typeOptions = LEAVE_TYPES.map((t) => t.short);
+  const reasonRef = useRef<TextInput>(null);
+  const [picker, setPicker] = useState<'from' | 'to' | null>(null);
+
+  const handlePicked = (event: DateTimePickerEvent, date?: Date) => {
+    const which = picker;
+    setPicker(null);
+    if (event.type === 'dismissed' || !date) return;
+    if (which === 'from') onFromDate(date);
+    else if (which === 'to') onToDate(date);
+  };
 
   return (
     <View style={cardShadow} className="rounded-[24px] border border-slate-100 bg-white p-5">
@@ -114,7 +145,11 @@ export default function LeaveForm({
       <View className="mt-4">
         <FieldLabel required>From</FieldLabel>
         <View className="flex-row gap-2">
-          <DateField value={fromDate} error={attempted && !fromDate} />
+          <DateField
+            value={fromDate}
+            error={attempted && !fromDate}
+            onPress={() => setPicker('from')}
+          />
           <Dropdown
             className="w-32"
             value={fromDuration}
@@ -129,7 +164,11 @@ export default function LeaveForm({
       <View className="mt-4">
         <FieldLabel required>To</FieldLabel>
         <View className="flex-row gap-2">
-          <DateField value={toDate} error={attempted && !toDate} />
+          <DateField
+            value={toDate}
+            error={attempted && !toDate}
+            onPress={() => setPicker('to')}
+          />
           <Dropdown
             className="w-32"
             value={toDuration}
@@ -140,13 +179,21 @@ export default function LeaveForm({
         </View>
       </View>
 
+      {daysSelected > 0 ? (
+        <Text className="mt-4 text-sm font-bold text-blue-600">
+          Applying leave for {formatDays(daysSelected)}{' '}
+          {daysSelected === 1 ? 'day' : 'days'}
+        </Text>
+      ) : null}
+
       {/* Reason */}
       <View className="mt-4">
         <FieldLabel required>Reason</FieldLabel>
         <TextInput
+          ref={reasonRef}
           value={reason}
           onChangeText={onReason}
-          onFocus={onReasonFocus}
+          onFocus={() => onReasonFocus?.(findNodeHandle(reasonRef.current))}
           placeholder="Share the reason for your leave request."
           placeholderTextColor="#94A3B8"
           multiline
@@ -160,40 +207,30 @@ export default function LeaveForm({
       {/* Attachment */}
       <View className="mt-4">
         <FieldLabel>Attachment</FieldLabel>
-        <View className="flex-row items-center gap-3 rounded-xl border border-slate-200 bg-white p-2 pl-2">
-          <Pressable
-            onPress={onPickFile}
-            className="flex-row items-center gap-2 rounded-lg bg-slate-100 px-3 py-2 active:opacity-70"
-          >
-            <Paperclip size={15} color="#475569" />
-            <Text className="text-sm font-semibold text-slate-600">
-              Choose file
-            </Text>
-          </Pressable>
-          <Text
-            numberOfLines={1}
-            className="flex-1 text-sm text-slate-400"
-          >
-            {attachment ? attachment.name : 'No file chosen'}
-          </Text>
-        </View>
+        <AttachmentField
+          fileName={attachment?.name ?? null}
+          onPress={onPickFile}
+        />
       </View>
 
       {/* Footer actions */}
-      <View className="mt-6 flex-row gap-3">
-        <Pressable
-          onPress={onClear}
-          className="h-12 flex-1 items-center justify-center rounded-xl border border-slate-200 bg-white active:scale-[0.98]"
-        >
-          <Text className="text-sm font-semibold text-ink">Clear</Text>
-        </Pressable>
+      <View className="mt-6">
         <Pressable
           onPress={onApply}
-          className="h-12 flex-[2] items-center justify-center rounded-xl bg-[#14323F] active:scale-[0.98]"
+          className="h-12 items-center justify-center rounded-xl bg-[#14323F] active:scale-[0.98]"
         >
           <Text className="text-sm font-bold text-white">Apply Leave</Text>
         </Pressable>
       </View>
+
+      {picker && (
+        <DateTimePicker
+          mode="date"
+          value={(picker === 'from' ? fromDate : toDate) ?? fromDate ?? new Date()}
+          minimumDate={picker === 'to' ? fromDate ?? undefined : undefined}
+          onChange={handlePicked}
+        />
+      )}
     </View>
   );
 }

@@ -136,11 +136,11 @@ export default function LeaveBalanceCard() {
           className="h-11 flex-1 flex-row items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 transition duration-200 active:scale-[0.98] active:bg-slate-50"
         >
           <MaterialCommunityIcons
-            name="calendar-month-outline"
+            name="beach"
             size={18}
             color="#14323F"
           />
-          <Text className="text-sm font-bold text-ink">Calendar</Text>
+          <Text className="text-sm font-bold text-ink">Holidays</Text>
         </Pressable>
       </View>
     </View>

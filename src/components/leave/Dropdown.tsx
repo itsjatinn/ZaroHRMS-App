@@ -1,6 +1,12 @@
 import { Check, ChevronDown } from 'lucide-react-native';
-import { useState } from 'react';
-import { Modal, Pressable, Text, View } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import {
+  Animated,
+  Easing,
+  Pressable,
+  Text,
+  View,
+} from 'react-native';
 
 type DropdownProps = {
   value: string | null;
@@ -11,7 +17,10 @@ type DropdownProps = {
   className?: string;
 };
 
-// Lightweight select built on a transparent Modal (RN has no native <select>).
+const OPTION_HEIGHT = 48;
+const MENU_PADDING = 12;
+
+// Lightweight select that overlays downward from the tapped field.
 export default function Dropdown({
   value,
   placeholder,
@@ -21,11 +30,54 @@ export default function Dropdown({
   className = '',
 }: DropdownProps) {
   const [open, setOpen] = useState(false);
+  const slideProgress = useRef(new Animated.Value(0)).current;
+  const menuHeight = options.length * OPTION_HEIGHT + MENU_PADDING;
+
+  useEffect(() => {
+    if (!open) return;
+
+    slideProgress.setValue(0);
+    Animated.timing(slideProgress, {
+      toValue: 1,
+      duration: 180,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: false,
+    }).start();
+  }, [open, slideProgress]);
+
+  const toggleMenu = () => {
+    if (open) {
+      closeMenu();
+      return;
+    }
+
+    setOpen(true);
+  };
+
+  const closeMenu = () => {
+    Animated.timing(slideProgress, {
+      toValue: 0,
+      duration: 120,
+      easing: Easing.in(Easing.cubic),
+      useNativeDriver: false,
+    }).start(() => setOpen(false));
+  };
+
+  const menuStyle = {
+    height: slideProgress.interpolate({
+      inputRange: [0, 1],
+      outputRange: [0, menuHeight],
+    }),
+    opacity: slideProgress,
+  };
 
   return (
-    <View className={className}>
+    <View
+      style={open ? { zIndex: 1000, elevation: 1000 } : undefined}
+      className={`relative ${className}`}
+    >
       <Pressable
-        onPress={() => setOpen(true)}
+        onPress={toggleMenu}
         className={`h-12 flex-row items-center justify-between rounded-xl border bg-white px-3.5 ${
           error ? 'border-red-400' : 'border-slate-200'
         }`}
@@ -36,18 +88,12 @@ export default function Dropdown({
         <ChevronDown size={18} color="#94A3B8" />
       </Pressable>
 
-      <Modal
-        visible={open}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setOpen(false)}
-      >
-        {/* Tap-outside backdrop closes the menu */}
-        <Pressable
-          onPress={() => setOpen(false)}
-          className="flex-1 justify-center bg-black/30 px-8"
+      {open ? (
+        <Animated.View
+          style={menuStyle}
+          className="absolute left-0 right-0 top-14 z-50 overflow-hidden rounded-2xl border border-slate-100 bg-white"
         >
-          <View className="overflow-hidden rounded-2xl bg-white p-1.5">
+          <View className="p-1.5">
             {options.map((option) => {
               const selected = option === value;
               return (
@@ -55,7 +101,7 @@ export default function Dropdown({
                   key={option}
                   onPress={() => {
                     onSelect(option);
-                    setOpen(false);
+                    closeMenu();
                   }}
                   className={`flex-row items-center justify-between rounded-xl px-4 py-3 ${
                     selected ? 'bg-blue-50' : 'active:bg-slate-100'
@@ -73,8 +119,8 @@ export default function Dropdown({
               );
             })}
           </View>
-        </Pressable>
-      </Modal>
+        </Animated.View>
+      ) : null}
     </View>
   );
 }
