@@ -2,7 +2,7 @@ import DateTimePicker, {
   type DateTimePickerEvent,
 } from '@react-native-community/datetimepicker';
 import * as DocumentPicker from 'expo-document-picker';
-import { useFocusEffect } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { CalendarDays, Clock3 } from 'lucide-react-native';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
@@ -27,11 +27,11 @@ import AttachmentField from '../../src/components/requests/AttachmentField';
 import { cardShadow } from '../../src/components/shadow';
 
 const REQUEST_TYPES = [
-  'Missed Check-in',
-  'Missed Check-out',
-  'Incorrect Check-in',
-  'Incorrect Check-out',
-  'Forgot Both',
+  'Missed punch',
+  'Wrong in/out',
+  'Forgot to check in',
+  'Work outdoor',
+  'Work from home',
 ] as const;
 
 const HOURS = Array.from({ length: 12 }, (_, index) =>
@@ -59,7 +59,7 @@ function FieldLabel({
   required?: boolean;
 }) {
   return (
-    <Text className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+    <Text className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
       {children}
       {required ? <Text className="text-red-500"> *</Text> : null}
     </Text>
@@ -211,6 +211,16 @@ export default function Regularize() {
 
   const [requestType, setRequestType] = useState<string | null>(null);
   const [date, setDate] = useState<Date | null>(null);
+
+  // Arriving from an absent day on the attendance calendar prefills the date
+  // (?date=YYYY-MM-DD).
+  const { date: dateParam } = useLocalSearchParams<{ date?: string }>();
+  useEffect(() => {
+    const raw = Array.isArray(dateParam) ? dateParam[0] : dateParam;
+    if (!raw) return;
+    const [y, m, d] = raw.split('-').map(Number);
+    if (y && m && d) setDate(new Date(y, m - 1, d));
+  }, [dateParam]);
   const [inHour, setInHour] = useState<string | null>(null);
   const [inMinute, setInMinute] = useState<string | null>(null);
   const [inMeridiem, setInMeridiem] = useState<string | null>(null);
@@ -392,7 +402,7 @@ export default function Regularize() {
               multiline
               textAlignVertical="top"
               className={`min-h-40 rounded-2xl border bg-white p-4 text-base text-ink ${
-                attempted && !reason.trim() ? 'border-red-400' : 'border-blue-600'
+                attempted && !reason.trim() ? 'border-red-400' : 'border-slate-200'
               }`}
             />
           </View>

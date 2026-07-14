@@ -1,6 +1,6 @@
 import { Feather } from '@expo/vector-icons';
 import { DrawerActions } from '@react-navigation/native';
-import { useNavigation } from 'expo-router';
+import { useNavigation, useRouter } from 'expo-router';
 import { useRef, useState } from 'react';
 import { Pressable, Text, TextInput, View } from 'react-native';
 import Animated, {
@@ -12,6 +12,7 @@ import Animated, {
 } from 'react-native-reanimated';
 
 import { currentUser } from '../data/currentUser';
+import { useUnreadCount } from './notifications/notificationsStore';
 
 function getGreeting() {
   const hour = new Date().getHours();
@@ -25,6 +26,8 @@ const EASING = Easing.inOut(Easing.cubic);
 
 export default function Header() {
   const navigation = useNavigation();
+  const router = useRouter();
+  const unreadCount = useUnreadCount();
   const firstName = currentUser.name.split(' ')[0];
 
   const [searchOpen, setSearchOpen] = useState(false);
@@ -75,11 +78,14 @@ export default function Header() {
 
   return (
     <View className="h-12 flex-row items-center">
-      {/* Menu — fixed on the left */}
+      {/* Menu — fixed on the left. Usable even mid-search: dismisses the
+          search bar so the drawer doesn't open over a focused keyboard. */}
       <Pressable
-        onPress={() => navigation.dispatch(DrawerActions.openDrawer())}
+        onPress={() => {
+          if (searchOpen) closeSearch();
+          navigation.dispatch(DrawerActions.openDrawer());
+        }}
         hitSlop={8}
-        disabled={searchOpen}
         accessibilityRole="button"
         accessibilityLabel="Open menu"
         className="mr-3 h-11 w-11 items-center justify-center active:scale-95"
@@ -90,8 +96,11 @@ export default function Header() {
         </View>
       </Pressable>
 
-      {/* Flexible middle: greeting (collapsed) with the search bar layered on top */}
-      <View className="min-w-0 flex-1 justify-center">
+      {/* Flexible middle: greeting (collapsed) with the search bar layered on
+          top. h-full is required: the row's items-center would otherwise
+          shrink this to the greeting's text height, squashing the absolutely
+          positioned search bar with it. */}
+      <View className="h-full min-w-0 flex-1 justify-center">
         <Animated.View style={greetingStyle} pointerEvents={searchOpen ? 'none' : 'auto'}>
           <Text numberOfLines={1} className="text-xl font-bold text-ink">
             {getGreeting()}, {firstName}
@@ -145,13 +154,16 @@ export default function Header() {
 
       {/* Notifications — fixed, always visible */}
       <Pressable
+        onPress={() => router.push('/notifications')}
         hitSlop={8}
         accessibilityRole="button"
         accessibilityLabel="Notifications"
         className="ml-1 h-11 w-11 items-center justify-center active:scale-95"
       >
         <Feather name="bell" size={22} color="#14323F" />
-        <View className="absolute right-2.5 top-2.5 h-2.5 w-2.5 rounded-full border-2 border-canvas bg-gold" />
+        {unreadCount > 0 ? (
+          <View className="absolute right-2.5 top-2.5 h-2.5 w-2.5 rounded-full border-2 border-canvas bg-gold" />
+        ) : null}
       </Pressable>
     </View>
   );

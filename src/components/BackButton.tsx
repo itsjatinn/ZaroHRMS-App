@@ -24,12 +24,15 @@ export default function BackButton({
 
   return (
     <View className="flex-row items-center gap-3 px-4 pb-1 pt-2">
+      {/* Bare icon button, matching the home header (no pill/circle chrome). */}
       <Pressable
         onPress={goBack}
         hitSlop={8}
-        className="h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white active:scale-95"
+        accessibilityRole="button"
+        accessibilityLabel="Go back"
+        className="h-11 w-11 items-center justify-center active:scale-95"
       >
-        <ChevronLeft size={20} color="#14323F" />
+        <ChevronLeft size={24} color="#14323F" />
       </Pressable>
       {title ? (
         <View className="flex-1">

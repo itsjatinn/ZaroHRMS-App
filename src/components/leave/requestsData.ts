@@ -14,73 +14,70 @@ export type Request = {
   type: string;
   dates: string;
   days: string;
+  month: string; // section header on the "All requests" screen, e.g. "August 2026"
   status: RequestStatus;
   icon: LucideIcon;
-  iconColor: string;
-  badgeClass: string; // pastel icon badge bg, e.g. "bg-blue-100"
+  rejectionReason?: string; // shown collapsibly on rejected cards
 };
 
 // Shared leave-request feed used by the Leave overview and the "All requests"
-// screen. Ordered newest-first.
+// screen. Ordered newest-first. Icons render ink-on-slate in RequestCard, so
+// no per-item color is carried here.
 export const REQUESTS: Request[] = [
+  {
+    id: '3',
+    type: 'Paternity Leave',
+    dates: '01 – 10 Sep 2026',
+    days: '10 days',
+    month: 'September 2026',
+    status: 'Approved',
+    icon: Baby,
+  },
   {
     id: '1',
     type: 'Annual Leave',
     dates: '12 – 14 Aug 2026',
     days: '3 days',
+    month: 'August 2026',
     status: 'Approved',
     icon: CalendarDays,
-    iconColor: '#2563EB',
-    badgeClass: 'bg-blue-100',
   },
   {
     id: '2',
     type: 'Sick Leave',
     dates: '28 Jul 2026',
     days: '1 day',
+    month: 'July 2026',
     status: 'Pending',
     icon: Activity,
-    iconColor: '#059669',
-    badgeClass: 'bg-emerald-100',
-  },
-  {
-    id: '3',
-    type: 'Paternity Leave',
-    dates: '01 – 10 Sep 2026',
-    days: '10 days',
-    status: 'Approved',
-    icon: Baby,
-    iconColor: '#D9A53B',
-    badgeClass: 'bg-amber-100',
   },
   {
     id: '4',
     type: 'Casual Leave',
     dates: '19 Jun 2026',
     days: '1 day',
+    month: 'June 2026',
     status: 'Rejected',
     icon: Sun,
-    iconColor: '#E11D48',
-    badgeClass: 'bg-rose-100',
+    rejectionReason:
+      'Insufficient casual leave balance for the selected date. Rejected by Riya Mehta (HR).',
   },
   {
     id: '5',
     type: 'Annual Leave',
     dates: '02 – 03 May 2026',
     days: '2 days',
+    month: 'May 2026',
     status: 'Approved',
     icon: Plane,
-    iconColor: '#2563EB',
-    badgeClass: 'bg-blue-100',
   },
   {
     id: '6',
     type: 'Sick Leave',
     dates: '14 Apr 2026',
     days: '1 day',
+    month: 'April 2026',
     status: 'Pending',
     icon: Activity,
-    iconColor: '#059669',
-    badgeClass: 'bg-emerald-100',
   },
 ];

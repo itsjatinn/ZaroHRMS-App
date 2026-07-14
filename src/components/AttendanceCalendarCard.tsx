@@ -1,5 +1,6 @@
 import { Feather } from '@expo/vector-icons';
-import { useState } from 'react';
+import { useRouter } from 'expo-router';
+import { useEffect, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 
 const NAVY = '#14323F';
@@ -45,11 +46,17 @@ export default function AttendanceCalendarCard({
   year,
   month,
 }: AttendanceCalendarCardProps) {
+  const router = useRouter();
   // month is 0-indexed; default June 2026 when uncontrolled.
   const [internal, setInternal] = useState({ year: 2026, month: 5 });
   const controlled = year != null && month != null;
   const cursor = controlled ? { year: year!, month: month! } : internal;
   const setCursor = setInternal;
+
+  // Absent day awaiting action; tapping it again (or any other day) dismisses.
+  const [selectedAbsent, setSelectedAbsent] = useState<number | null>(null);
+  // Measured width of the day grid, needed to pixel-position the popover.
+  const [gridWidth, setGridWidth] = useState(0);
 
   const isDemoMonth = cursor.year === 2026 && cursor.month === 5;
   const firstDay = new Date(cursor.year, cursor.month, 1).getDay();
@@ -68,7 +75,13 @@ export default function AttendanceCalendarCard({
   const weeks: (number | null)[][] = [];
   for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i + 7));
 
-  const shiftMonth = (delta: number) =>
+  // Any month change (arrows here, or the parent's filter when controlled)
+  // invalidates the selection.
+  useEffect(() => {
+    setSelectedAbsent(null);
+  }, [cursor.year, cursor.month]);
+
+  const shiftMonth = (delta: number) => {
     setCursor((c) => {
       const m = c.month + delta;
       return {
@@ -76,6 +89,45 @@ export default function AttendanceCalendarCard({
         month: ((m % 12) + 12) % 12,
       };
     });
+  };
+
+  // Tap an absent day to toggle the callout; tapping any other day dismisses.
+  const handleDayPress = (day: number, status: Status | undefined) => {
+    if (status === 'absent') {
+      setSelectedAbsent((current) => (current === day ? null : day));
+    } else {
+      setSelectedAbsent(null);
+    }
+  };
+
+  const goRegularize = () => {
+    if (selectedAbsent == null) return;
+    const mm = String(cursor.month + 1).padStart(2, '0');
+    const dd = String(selectedAbsent).padStart(2, '0');
+    setSelectedAbsent(null);
+    router.push(`/regularize?date=${cursor.year}-${mm}-${dd}`);
+  };
+
+  // Popover geometry: anchored to the selected day's cell, clamped to the
+  // grid, flipped above the day when it sits in the last row.
+  const ROW_H = 48; // h-12 day rows
+  const PILL_W = 118;
+  const PILL_H = 34;
+  let pillStyle: { top: number; left: number } | null = null;
+  if (selectedAbsent != null && gridWidth > 0) {
+    const position = firstDay + selectedAbsent - 1;
+    const row = Math.floor(position / 7);
+    const col = position % 7;
+    const cellW = gridWidth / 7;
+    const lastRow = row === weeks.length - 1;
+    pillStyle = {
+      top: lastRow ? row * ROW_H - PILL_H + 4 : (row + 1) * ROW_H - 4,
+      left: Math.min(
+        Math.max(col * cellW + cellW / 2 - PILL_W / 2, 0),
+        gridWidth - PILL_W,
+      ),
+    };
+  }
 
   return (
     <View
@@ -119,18 +171,33 @@ export default function AttendanceCalendarCard({
         ))}
       </View>
 
-      <View className="mt-2">
+      <View
+        className="relative mt-2"
+        onLayout={(e) => setGridWidth(e.nativeEvent.layout.width)}
+      >
         {weeks.map((week, wi) => (
           <View key={wi} className="flex-row">
             {week.map((day, di) => {
               const status = day && isDemoMonth ? DEMO_STATUSES[day] : undefined;
               const isWeekend = di === 0 || di === 6;
+              const selected = day != null && day === selectedAbsent;
               return (
-                <View key={di} className="h-12 flex-1 items-center justify-center">
+                <Pressable
+                  key={di}
+                  disabled={day == null}
+                  onPress={() => day != null && handleDayPress(day, status)}
+                  className="h-12 flex-1 items-center justify-center"
+                >
                   {day == null ? null : status ? (
                     <View
                       className="h-9 w-9 items-center justify-center rounded-full"
-                      style={{ backgroundColor: STATUS_STYLE[status].bg }}
+                      style={{
+                        backgroundColor: STATUS_STYLE[status].bg,
+                        // Absent days are actionable; the selected one gets an
+                        // ink ring while its popover is showing.
+                        borderWidth: selected ? 2 : 0,
+                        borderColor: NAVY,
+                      }}
                     >
                       <Text
                         className="text-sm font-semibold"
@@ -148,11 +215,34 @@ export default function AttendanceCalendarCard({
                       {day}
                     </Text>
                   )}
-                </View>
+                </Pressable>
               );
             })}
           </View>
         ))}
+
+        {/* Regularize popover pill, anchored to the selected absent day */}
+        {pillStyle ? (
+          <Pressable
+            onPress={goRegularize}
+            style={{
+              position: 'absolute',
+              width: PILL_W,
+              height: PILL_H,
+              zIndex: 10,
+              elevation: 6,
+              shadowColor: NAVY,
+              shadowOffset: { width: 0, height: 4 },
+              shadowOpacity: 0.18,
+              shadowRadius: 8,
+              ...pillStyle,
+            }}
+            className="flex-row items-center justify-center gap-1.5 rounded-xl bg-ink active:scale-95"
+          >
+            <Feather name="rotate-ccw" size={13} color="#FFFFFF" />
+            <Text className="text-xs font-bold text-white">Regularize</Text>
+          </Pressable>
+        ) : null}
       </View>
 
       <View className="mt-5 flex-row flex-wrap gap-x-4 gap-y-2 border-t border-slate-100 pt-4">

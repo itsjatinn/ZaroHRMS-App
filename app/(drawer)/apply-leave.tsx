@@ -12,7 +12,10 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import BackButton from '../../src/components/BackButton';
 import BalanceCard from '../../src/components/leave/BalanceCard';
-import BalanceTile from '../../src/components/leave/BalanceTile';
+import BalanceTile, {
+  TILE_GAP,
+  TILE_WIDTH,
+} from '../../src/components/leave/BalanceTile';
 import LeaveForm from '../../src/components/leave/LeaveForm';
 import {
   LEAVE_TYPES,
@@ -26,8 +29,8 @@ import {
 const STATS = [
   { label: 'Annual', value: 6, accent: '#2563EB' },
   { label: 'Sick', value: 8, accent: '#059669' },
-  { label: 'Paternity', value: 7, accent: '#EA7317' },
-  { label: 'Casual', value: 10, accent: '#E11D48' },
+  { label: 'Paternity', value: 7, accent: '#D9A53B' },
+  { label: 'Casual', value: 10, accent: '#E0785C' },
 ];
 
 const REASON_KEYBOARD_OFFSET = 85;
@@ -163,6 +166,8 @@ export default function LeaveApplicationScreen() {
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
+          snapToInterval={TILE_WIDTH + TILE_GAP}
+          decelerationRate="fast"
           contentContainerClassName="gap-3"
         >
           {STATS.map((s) => (

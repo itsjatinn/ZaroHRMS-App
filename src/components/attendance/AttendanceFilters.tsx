@@ -46,7 +46,7 @@ export default function AttendanceFilters({
         <Pressable
           onPress={() => step(-1)}
           hitSlop={6}
-          className="h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white active:scale-95"
+          className="h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white active:scale-95"
         >
           <ChevronLeft size={18} color="#14323F" />
         </Pressable>
@@ -56,7 +56,7 @@ export default function AttendanceFilters({
         <Pressable
           onPress={() => step(1)}
           hitSlop={6}
-          className="h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white active:scale-95"
+          className="h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white active:scale-95"
         >
           <ChevronRight size={18} color="#14323F" />
         </Pressable>

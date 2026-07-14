@@ -25,14 +25,14 @@ export default function MonthFilter({ year, month, onChange }: Props) {
   };
 
   return (
-    <View className="flex-row items-center gap-1 rounded-full border border-slate-200 bg-white px-1.5 py-1">
-      <Pressable onPress={() => step(-1)} hitSlop={6} className="h-7 w-7 items-center justify-center rounded-full active:bg-slate-100">
+    <View className="flex-row items-center gap-1 rounded-xl border border-slate-200 bg-white px-1.5 py-1">
+      <Pressable onPress={() => step(-1)} hitSlop={6} className="h-7 w-7 items-center justify-center rounded-lg active:bg-slate-100">
         <ChevronLeft size={16} color="#14323F" />
       </Pressable>
       <Text className="min-w-[64px] text-center text-[13px] font-bold text-ink">
         {MONTHS[month]} {year}
       </Text>
-      <Pressable onPress={() => step(1)} hitSlop={6} className="h-7 w-7 items-center justify-center rounded-full active:bg-slate-100">
+      <Pressable onPress={() => step(1)} hitSlop={6} className="h-7 w-7 items-center justify-center rounded-lg active:bg-slate-100">
         <ChevronRight size={16} color="#14323F" />
       </Pressable>
     </View>

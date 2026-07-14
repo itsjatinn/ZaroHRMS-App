@@ -217,7 +217,7 @@ export default function LeaveForm({
       <View className="mt-6">
         <Pressable
           onPress={onApply}
-          className="h-12 items-center justify-center rounded-xl bg-[#14323F] active:scale-[0.98]"
+          className="h-12 items-center justify-center rounded-xl bg-ink active:scale-[0.98] active:bg-ink/90"
         >
           <Text className="text-sm font-bold text-white">Apply Leave</Text>
         </Pressable>
