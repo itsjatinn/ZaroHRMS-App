@@ -18,7 +18,7 @@ type Props = {
 };
 
 const INK = '#14323F'; // primary card color
-const CANVAS = '#F9F9F9'; // page background — carves a light hole between the cards
+const CANVAS = '#F7F6FC'; // page background — carves a light hole between the cards
 const ICON_COLOR = '#F5D14E';
 const GAP = 10;
 const HOLE = 108; // diameter of the circular hole cut in the center

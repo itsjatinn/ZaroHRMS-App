@@ -6,13 +6,28 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import Dropdown from '../../src/components/leave/Dropdown';
 import RequestCard from '../../src/components/leave/RequestCard';
+import CancelLeaveDialog from '../../src/components/leave/CancelLeaveDialog';
+import type { RequestStatus } from '../../src/components/leave/RequestCard';
 import { REQUESTS, type Request } from '../../src/components/leave/requestsData';
 import { cardShadow } from '../../src/components/shadow';
 
 const YEARS = ['2026', '2025', '2024'] as const;
 
-const FILTERS = ['All', 'Pending', 'Approved', 'Rejected'] as const;
+// Every status the HRMS tracks — the old four hid cancelled and withdrawn
+// requests entirely. Too many for a segmented control, so they scroll.
+const FILTERS = [
+  'All',
+  'Pending',
+  'Approved',
+  'Rejected',
+  'Cancellation requested',
+  'Cancelled',
+  'Cancellation rejected',
+] as const;
 type Filter = (typeof FILTERS)[number];
+
+/** Statuses an employee can still withdraw. */
+const CANCELLABLE: RequestStatus[] = ['Pending', 'Approved'];
 
 // Compact at-a-glance tile for the summary row.
 function SummaryChip({ value, label }: { value: number; label: string }) {
@@ -33,23 +48,48 @@ export default function AllRequestsScreen() {
   const router = useRouter();
   const [filter, setFilter] = useState<Filter>('All');
   const [year, setYear] = useState<string>('2026');
+  const [cancelTarget, setCancelTarget] = useState<Request | null>(null);
+  /**
+   * Withdrawals applied locally, keyed by request id. The real flow will PATCH
+   * the request; until then this at least makes the action do something rather
+   * than silently discarding the tap.
+   */
+  const [withdrawn, setWithdrawn] = useState<Record<string, RequestStatus>>({});
+
+  const requests = useMemo(
+    () =>
+      REQUESTS.map((r) =>
+        withdrawn[r.id] ? { ...r, status: withdrawn[r.id] } : r,
+      ),
+    [withdrawn],
+  );
+
+  const confirmCancel = (request: Request, reason: string) => {
+    // HR reviews the withdrawal, so it becomes a request rather than a done deal.
+    setWithdrawn((current) => ({
+      ...current,
+      [request.id]: 'Cancellation requested',
+    }));
+    setCancelTarget(null);
+    console.log('Leave cancellation requested:', { id: request.id, reason });
+  };
 
   const counts = useMemo(
     () => ({
-      All: REQUESTS.length,
-      Pending: REQUESTS.filter((r) => r.status === 'Pending').length,
-      Approved: REQUESTS.filter((r) => r.status === 'Approved').length,
-      Rejected: REQUESTS.filter((r) => r.status === 'Rejected').length,
+      All: requests.length,
+      Pending: requests.filter((r) => r.status === 'Pending').length,
+      Approved: requests.filter((r) => r.status === 'Approved').length,
+      Rejected: requests.filter((r) => r.status === 'Rejected').length,
     }),
-    [],
+    [requests],
   );
 
   const visible = useMemo(
     () =>
       filter === 'All'
-        ? REQUESTS
-        : REQUESTS.filter((r) => r.status === filter),
-    [filter],
+        ? requests
+        : requests.filter((r) => r.status === filter),
+    [filter, requests],
   );
 
   // Consecutive requests sharing a month collapse under one section header
@@ -104,30 +144,37 @@ export default function AllRequestsScreen() {
         <SummaryChip value={counts.Rejected} label="Rejected" />
       </View>
 
-      {/* Filter segmented control */}
-      <View className="mx-4 mt-4 flex-row rounded-2xl bg-slate-200/70 p-1.5">
+      {/* Status filter — scrolls, since there are seven of them */}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        className="mt-4 grow-0"
+        contentContainerClassName="gap-2 px-4"
+      >
         {FILTERS.map((f) => {
           const active = filter === f;
           return (
             <Pressable
               key={f}
               onPress={() => setFilter(f)}
-              className={`flex-1 items-center justify-center rounded-xl py-2.5 ${
-                active ? 'bg-white' : ''
-              }`}
-              style={active ? cardShadow : undefined}
+              accessibilityRole="button"
+              accessibilityState={{ selected: active }}
+              className="h-8 items-center justify-center rounded-full border px-3.5"
+              style={{
+                backgroundColor: active ? '#14323F' : '#FFFFFF',
+                borderColor: active ? '#14323F' : 'rgba(13, 55, 73, 0.15)',
+              }}
             >
               <Text
-                className={`text-sm font-semibold ${
-                  active ? 'text-ink' : 'text-slate-500'
-                }`}
+                className="text-[13px] font-semibold"
+                style={{ color: active ? '#FFFFFF' : 'rgba(13, 55, 73, 0.65)' }}
               >
                 {f}
               </Text>
             </Pressable>
           );
         })}
-      </View>
+      </ScrollView>
 
       <ScrollView
         className="flex-1"
@@ -136,7 +183,7 @@ export default function AllRequestsScreen() {
       >
         {grouped.length > 0 ? (
           grouped.map((section, i) => (
-            <View key={section.month} className={i === 0 ? '' : 'mt-5'}>
+            <View key={`${section.month}-${i}`} className={i === 0 ? '' : 'mt-5'}>
               <Text className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
                 {section.month}
               </Text>
@@ -150,7 +197,11 @@ export default function AllRequestsScreen() {
                     status={r.status}
                     icon={r.icon}
                     rejectionReason={r.rejectionReason}
-                    onCancel={r.status !== 'Rejected' ? () => {} : undefined}
+                    onCancel={
+                      CANCELLABLE.includes(r.status)
+                        ? () => setCancelTarget(r)
+                        : undefined
+                    }
                   />
                 ))}
               </View>
@@ -170,6 +221,11 @@ export default function AllRequestsScreen() {
           </View>
         )}
       </ScrollView>
+      <CancelLeaveDialog
+        request={cancelTarget}
+        onKeep={() => setCancelTarget(null)}
+        onConfirm={confirmCancel}
+      />
     </SafeAreaView>
   );
 }

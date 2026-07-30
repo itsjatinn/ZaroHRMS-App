@@ -70,7 +70,7 @@ export default function EventMonthGrid({
   return (
     <View
       style={cardShadow}
-      className="rounded-[24px] border border-slate-100 bg-white p-4"
+      className="rounded-[22px] border border-slate-100 bg-white p-4"
     >
       <View className="flex-row">
         {WEEKDAYS.map((w) => (

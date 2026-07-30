@@ -1,7 +1,11 @@
 import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
+
+import { useMonthAttendance, type AttendanceStatus } from '../api/attendance';
+import { useAuth } from '../auth/AuthContext';
+import { cardShadow } from './shadow';
 
 const NAVY = '#14323F';
 const WEEKDAYS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
@@ -41,14 +45,38 @@ type AttendanceCalendarCardProps = {
   month?: number; // 0-11
 };
 
+/** Backend statuses → the card's day colours. WO/HOLIDAY stay unmarked. */
+function toDayStatus(status: AttendanceStatus | null | undefined): Status | undefined {
+  switch (status) {
+    case 'PRESENT':
+    case 'WFH':
+    case 'ON_DUTY':
+    case 'HALF_DAY':
+      return 'present';
+    case 'ABSENT':
+      return 'absent';
+    case 'LEAVE':
+      return 'approved';
+    default:
+      return undefined;
+  }
+}
+
 export default function AttendanceCalendarCard({
   variant = 'card',
   year,
   month,
 }: AttendanceCalendarCardProps) {
   const router = useRouter();
-  // month is 0-indexed; default June 2026 when uncontrolled.
-  const [internal, setInternal] = useState({ year: 2026, month: 5 });
+  const { isBackendSession } = useAuth();
+  const now = new Date();
+  // month is 0-indexed. Live sessions open on the real current month; the
+  // offline demo keeps June 2026, the month its sample statuses describe.
+  const [internal, setInternal] = useState(
+    isBackendSession
+      ? { year: now.getFullYear(), month: now.getMonth() }
+      : { year: 2026, month: 5 },
+  );
   const controlled = year != null && month != null;
   const cursor = controlled ? { year: year!, month: month! } : internal;
   const setCursor = setInternal;
@@ -58,7 +86,35 @@ export default function AttendanceCalendarCard({
   // Measured width of the day grid, needed to pixel-position the popover.
   const [gridWidth, setGridWidth] = useState(0);
 
-  const isDemoMonth = cursor.year === 2026 && cursor.month === 5;
+  const isDemoMonth =
+    !isBackendSession && cursor.year === 2026 && cursor.month === 5;
+
+  // Real entries for the visible month (1-12 on the wire). Each entry's
+  // business date picks the grid cell; the status picks its colour.
+  const monthQuery = useMonthAttendance(
+    cursor.year,
+    cursor.month + 1,
+    isBackendSession,
+  );
+  const dayStatuses = useMemo(() => {
+    const map: Record<number, Status> = {};
+    for (const entry of monthQuery.data ?? []) {
+      if (!entry?.date) continue;
+      const day = new Date(entry.date).getDate();
+      const status = toDayStatus(entry.status);
+      if (status) map[day] = status;
+    }
+    // Today's cell gets its ring only when nothing else already marks it.
+    const today = new Date();
+    if (
+      cursor.year === today.getFullYear() &&
+      cursor.month === today.getMonth() &&
+      !map[today.getDate()]
+    ) {
+      map[today.getDate()] = 'today';
+    }
+    return map;
+  }, [monthQuery.data, cursor.year, cursor.month]);
   const firstDay = new Date(cursor.year, cursor.month, 1).getDay();
   const daysInMonth = new Date(cursor.year, cursor.month + 1, 0).getDate();
   const label = new Date(cursor.year, cursor.month, 1).toLocaleDateString(
@@ -131,9 +187,12 @@ export default function AttendanceCalendarCard({
 
   return (
     <View
+      // Only the card variant carries the shared card chrome; the inline
+      // variant is embedded in a page that already provides its own surface.
+      style={variant === 'card' ? cardShadow : undefined}
       className={
         variant === 'card'
-          ? 'rounded-[24px] border border-slate-100 bg-white px-5 py-5'
+          ? 'rounded-[22px] border border-slate-100 bg-white px-5 py-5'
           : 'px-1 py-1'
       }
     >
@@ -178,7 +237,13 @@ export default function AttendanceCalendarCard({
         {weeks.map((week, wi) => (
           <View key={wi} className="flex-row">
             {week.map((day, di) => {
-              const status = day && isDemoMonth ? DEMO_STATUSES[day] : undefined;
+              const status = day
+                ? isBackendSession
+                  ? dayStatuses[day]
+                  : isDemoMonth
+                    ? DEMO_STATUSES[day]
+                    : undefined
+                : undefined;
               const isWeekend = di === 0 || di === 6;
               const selected = day != null && day === selectedAbsent;
               return (
@@ -260,7 +325,7 @@ export default function AttendanceCalendarCard({
             className="h-3 w-3 rounded-full border"
             style={{ borderColor: '#6B5FCF', borderStyle: 'dashed' }}
           />
-          <Text className="text-xs text-slate-500">WFH / Outdoor</Text>
+          <Text className="text-xs text-slate-500">WFH / On duty</Text>
         </View>
       </View>
     </View>

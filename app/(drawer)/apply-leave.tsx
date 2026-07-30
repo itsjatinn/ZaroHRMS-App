@@ -1,43 +1,45 @@
 import * as ImagePicker from 'expo-image-picker';
 import { useFocusEffect } from 'expo-router';
-import { useCallback, useEffect, useRef, useState } from 'react';
-import {
-  Alert,
-  Keyboard,
-  ScrollView,
-  useWindowDimensions,
-  View,
-} from 'react-native';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Alert, Keyboard, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import BackButton from '../../src/components/BackButton';
-import BalanceCard from '../../src/components/leave/BalanceCard';
 import BalanceTile, {
   TILE_GAP,
   TILE_WIDTH,
 } from '../../src/components/leave/BalanceTile';
+import {
+  useApplicableLeaveTypes,
+  useLeavePolicySettings,
+  useMyLeaveRequests,
+} from '../../src/api/leave';
+import { useHolidayCalendar } from '../../src/api/holidays';
+import { useAuth } from '../../src/auth/AuthContext';
 import LeaveForm from '../../src/components/leave/LeaveForm';
 import {
   LEAVE_TYPES,
-  daysBetween,
-  isSameDay,
   type Duration,
   type LeaveType,
 } from '../../src/components/leave/leaveData';
+import { evaluateLeaveRequest } from '../../src/components/leave/leavePolicy';
 
-// Top balance tiles (mirrors the leave balances).
-const STATS = [
-  { label: 'Annual', value: 6, accent: '#2563EB' },
-  { label: 'Sick', value: 8, accent: '#059669' },
-  { label: 'Paternity', value: 7, accent: '#D9A53B' },
-  { label: 'Casual', value: 10, accent: '#E0785C' },
+/**
+ * Accents for the balance tiles, assigned by position. The same rotation the
+ * web's leave widgets use, so a type keeps a consistent colour across products.
+ */
+const TILE_ACCENTS = [
+  '#E07856',
+  '#5E9B7B',
+  '#D4A24A',
+  '#7C7BD8',
+  '#2F6D7F',
+  '#B96A00',
 ];
 
 const REASON_KEYBOARD_OFFSET = 85;
 
 export default function LeaveApplicationScreen() {
-  const { width } = useWindowDimensions();
-  const isWide = width >= 720; // two-column / 4-up layout above this width
   const scrollRef = useRef<ScrollView>(null);
   const reasonTargetRef = useRef<number | null>(null);
   // Bottom padding equal to the keyboard height gives the form room to scroll
@@ -88,6 +90,7 @@ export default function LeaveApplicationScreen() {
     scrollReasonToKeyboard(target);
   };
 
+
   // ---- Form state ----
   const [leaveType, setLeaveType] = useState<LeaveType | null>(null);
   const [fromDate, setFromDate] = useState<Date | null>(null);
@@ -98,21 +101,95 @@ export default function LeaveApplicationScreen() {
   const [attachment, setAttachment] = useState<{ name: string } | null>(null);
   const [attempted, setAttempted] = useState(false);
 
-  // Days requested, adjusting half-days at either end.
-  let daysSelected = daysBetween(fromDate, toDate);
-  if (fromDate && toDate && isSameDay(fromDate, toDate)) {
-    if (fromDuration === 'Half Day' || toDuration === 'Half Day') {
-      daysSelected = 0.5;
+  // Tenant-configured types, filtered to what this employee may apply for. The
+  // demo session has no bearer token, so everything below falls back to local
+  // defaults rather than firing requests that would 401 and sign the user out.
+  const { isBackendSession } = useAuth();
+  const applicable = useApplicableLeaveTypes(isBackendSession);
+  const leaveTypes = isBackendSession ? applicable.types : LEAVE_TYPES;
+
+  /**
+   * Rules for the chosen type. The app's LeaveType carries only display fields,
+   * so until the settings payload exposes per-type flags these stay at the
+   * permissive defaults: paid, no sandwich rule, no consecutive-day cap.
+   */
+  const selectedRules = useMemo(
+    () =>
+      leaveType
+        ? { paid: true, sandwichRule: false, maxConsecutiveDays: 0 }
+        : null,
+    [leaveType],
+  );
+
+  const policy = useLeavePolicySettings(isBackendSession);
+  const existingRequests = useMyLeaveRequests(isBackendSession);
+  const holidays = useHolidayCalendar(new Date().getFullYear(), isBackendSession);
+
+  // Non-optional holidays drop out of the day count when the tenant excludes
+  // them; optional ones only count once claimed, so they are not included here.
+  const holidayKeys = useMemo(() => {
+    const keys = new Set<string>();
+    for (const holiday of holidays.data?.holidays ?? []) {
+      const iso = holiday.isoDate || holiday.date;
+      const optional =
+        holiday.isOptional ||
+        String(holiday.holidayType || holiday.type || '').toLowerCase() ===
+          'optional';
+      if (iso && !optional) keys.add(String(iso).slice(0, 10));
     }
-  } else {
-    if (fromDate && fromDuration === 'Half Day') daysSelected -= 0.5;
-    if (toDate && toDuration === 'Half Day') daysSelected -= 0.5;
-  }
-  daysSelected = Math.max(daysSelected, 0);
+    return keys;
+  }, [holidays.data]);
+
+  // Chargeable days and every policy check, computed by the shared rules in
+  // leavePolicy.ts so this screen only has to render the verdict.
+  const evaluation = useMemo(
+    () =>
+      evaluateLeaveRequest({
+        from: fromDate,
+        to: toDate,
+        fromSession: fromDuration === 'Half Day' ? 'first-half' : 'full',
+        toSession: toDuration === 'Half Day' ? 'first-half' : 'full',
+        settings: policy,
+        type: selectedRules,
+        holidayKeys,
+        balanceRemaining: leaveType ? leaveType.remaining : null,
+        maxConsecutiveDays: selectedRules?.maxConsecutiveDays ?? 0,
+        reason,
+        hasAttachment: attachment !== null,
+        existingRequests: existingRequests.data ?? [],
+        today: new Date(),
+      }),
+    [
+      fromDate,
+      toDate,
+      fromDuration,
+      toDuration,
+      policy,
+      selectedRules,
+      holidayKeys,
+      leaveType,
+      reason,
+      attachment,
+      existingRequests.data,
+    ],
+  );
+
+  const daysSelected = evaluation.totalDays ?? 0;
+
+  // Blockers only after a submit attempt, so the form doesn't scold the user
+  // for fields they haven't reached yet. Warnings show as soon as they apply.
+  const notices = useMemo(
+    () => [
+      ...(attempted
+        ? evaluation.blockers.map((text) => ({ text, blocking: true }))
+        : []),
+      ...evaluation.warnings.map((text) => ({ text, blocking: false })),
+    ],
+    [attempted, evaluation.blockers, evaluation.warnings],
+  );
 
   const handleSelectType = (label: string) => {
-    const found = LEAVE_TYPES.find((t) => t.short === label) ?? null;
-    setLeaveType(found);
+    setLeaveType(leaveTypes.find((t) => t.short === label) ?? null);
   };
 
   const pickFile = async () => {
@@ -132,11 +209,8 @@ export default function LeaveApplicationScreen() {
     }
   };
 
-  const applyLeave = () => {
-    setAttempted(true);
-    // All starred fields are required.
-    if (!leaveType || !fromDate || !toDate || !reason.trim()) return;
-
+  const submitRequest = () => {
+    if (!leaveType) return;
     const payload = {
       leaveType: leaveType.key,
       fromDate,
@@ -144,12 +218,68 @@ export default function LeaveApplicationScreen() {
       fromDuration,
       toDuration,
       days: daysSelected,
+      paidDays: evaluation.paidDays,
+      lopDays: evaluation.lopDays,
       reason: reason.trim(),
       attachment: attachment?.name ?? null,
     };
     console.log('Leave application payload:', payload);
     Alert.alert('Leave applied', `${daysSelected} day(s) of ${leaveType.label}.`);
   };
+
+  const applyLeave = () => {
+    setAttempted(true);
+    if (!leaveType || !fromDate || !toDate) return;
+
+    // Policy blockers are hard stops — the first one is the actionable message.
+    if (evaluation.blockers.length > 0) {
+      Alert.alert('Check your request', evaluation.blockers[0]);
+      return;
+    }
+
+    // Over-balance days become loss of pay. Make that explicit before the
+    // request goes in, rather than letting it surface on a payslip.
+    if (evaluation.needsLopAcknowledgement) {
+      Alert.alert(
+        'Some days are unpaid',
+        `${evaluation.lopDays} of ${daysSelected} day(s) exceed your balance and will be treated as loss of pay.`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Apply anyway', onPress: submitRequest },
+        ],
+      );
+      return;
+    }
+
+    submitRequest();
+  };
+
+  // Built once so the wide and stacked layouts below can order the same two
+  // elements differently without duplicating the form's prop list.
+  const leaveDetailsForm = (
+    <LeaveForm
+      types={leaveTypes}
+      notices={notices}
+      leaveType={leaveType}
+      onSelectType={handleSelectType}
+      fromDate={fromDate}
+      toDate={toDate}
+      onFromDate={setFromDate}
+      onToDate={setToDate}
+      fromDuration={fromDuration}
+      toDuration={toDuration}
+      onFromDuration={(d) => setFromDuration(d as Duration)}
+      onToDuration={(d) => setToDuration(d as Duration)}
+      reason={reason}
+      onReason={setReason}
+      onReasonFocus={handleReasonFocus}
+      attachment={attachment}
+      onPickFile={pickFile}
+      attempted={attempted}
+      daysSelected={daysSelected}
+      onApply={applyLeave}
+    />
+  );
 
   return (
     <SafeAreaView edges={['top', 'left', 'right']} className="flex-1 bg-canvas">
@@ -170,47 +300,26 @@ export default function LeaveApplicationScreen() {
           decelerationRate="fast"
           contentContainerClassName="gap-3"
         >
-          {STATS.map((s) => (
+          {/* Tapping a tile picks that leave type in the form below — the same
+              selector behaviour as the web's balance tiles. */}
+          {leaveTypes.map((type, index) => (
             <BalanceTile
-              key={s.label}
-              label={s.label}
-              value={s.value}
-              accent={s.accent}
+              key={type.key}
+              label={type.short}
+              value={type.remaining}
+              accent={TILE_ACCENTS[index % TILE_ACCENTS.length]}
+              selected={leaveType?.key === type.key}
+              remainingAfter={
+                leaveType?.key === type.key ? evaluation.remainingAfter : null
+              }
+              onPress={() => setLeaveType(type)}
             />
           ))}
         </ScrollView>
 
-        {/* 2) Main area — two columns on wide screens, stacked on narrow */}
-        <View className={isWide ? 'flex-row gap-4' : 'gap-4'}>
-          {/* Left column: balance summary */}
-          <View className={isWide ? 'flex-1 gap-4' : 'gap-4'}>
-            <BalanceCard leaveType={leaveType} daysSelected={daysSelected} />
-          </View>
-
-          {/* Right column: leave details form */}
-          <View className="flex-1">
-            <LeaveForm
-              leaveType={leaveType}
-              onSelectType={handleSelectType}
-              fromDate={fromDate}
-              toDate={toDate}
-              onFromDate={setFromDate}
-              onToDate={setToDate}
-              fromDuration={fromDuration}
-              toDuration={toDuration}
-              onFromDuration={(d) => setFromDuration(d as Duration)}
-              onToDuration={(d) => setToDuration(d as Duration)}
-              reason={reason}
-              onReason={setReason}
-              onReasonFocus={handleReasonFocus}
-              attachment={attachment}
-              onPickFile={pickFile}
-              attempted={attempted}
-              daysSelected={daysSelected}
-              onApply={applyLeave}
-            />
-          </View>
-        </View>
+        {/* 2) The form. The post-apply balance lives on the selected tile
+            above, so there is no separate summary card to place. */}
+        <View>{leaveDetailsForm}</View>
       </ScrollView>
     </SafeAreaView>
   );

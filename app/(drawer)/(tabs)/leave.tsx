@@ -21,7 +21,17 @@ const BALANCES = [
   { label: 'Paternity', value: 10, accent: '#D9A53B' },
 ];
 
-const FILTERS = ['All', 'Pending', 'Approved', 'Rejected'] as const;
+// Mirrors the view-all page. Cancelled and withdrawn requests were previously
+// unreachable from either screen.
+const FILTERS = [
+  'All',
+  'Pending',
+  'Approved',
+  'Rejected',
+  'Cancellation requested',
+  'Cancelled',
+  'Cancellation rejected',
+] as const;
 type Filter = (typeof FILTERS)[number];
 
 export default function LeaveOverviewScreen() {
@@ -34,6 +44,13 @@ export default function LeaveOverviewScreen() {
       Pending: REQUESTS.filter((r) => r.status === 'Pending').length,
       Approved: REQUESTS.filter((r) => r.status === 'Approved').length,
       Rejected: REQUESTS.filter((r) => r.status === 'Rejected').length,
+      Cancelled: REQUESTS.filter((r) => r.status === 'Cancelled').length,
+      'Cancellation requested': REQUESTS.filter(
+        (r) => r.status === 'Cancellation requested',
+      ).length,
+      'Cancellation rejected': REQUESTS.filter(
+        (r) => r.status === 'Cancellation rejected',
+      ).length,
     }),
     [],
   );
@@ -54,39 +71,39 @@ export default function LeaveOverviewScreen() {
 
   return (
     <SafeAreaView edges={['top', 'left', 'right']} className="flex-1 bg-canvas">
-      {/* Header — mirrors the shared BackButton styling, with a trailing
-          notification bell unique to the overview. */}
-      <View className="flex-row items-center gap-3 px-4 pb-1 pt-2">
-        <Pressable
-          onPress={goBack}
-          hitSlop={8}
-          className="h-11 w-11 items-center justify-center active:scale-95"
-        >
-          <ChevronLeft size={24} color="#14323F" />
-        </Pressable>
-        <View className="flex-1">
-          <Text className="text-lg font-bold text-ink">My Leave</Text>
-          <Text className="text-xs text-slate-400">
-            Balances, requests & regularizations
-          </Text>
-        </View>
-        <Pressable
-          onPress={() => router.push('/notifications')}
-          hitSlop={8}
-          className="h-11 w-11 items-center justify-center active:scale-95"
-        >
-          <Bell size={22} color="#14323F" />
-          {unreadCount > 0 ? (
-            <View className="absolute right-2.5 top-2.5 h-2.5 w-2.5 rounded-full border-2 border-canvas bg-gold" />
-          ) : null}
-        </Pressable>
-      </View>
-
       <ScrollView
         className="flex-1"
         contentContainerClassName="pb-32"
         showsVerticalScrollIndicator={false}
       >
+        {/* Header — mirrors the shared BackButton styling, with a trailing
+            notification bell unique to the overview. */}
+        <View className="flex-row items-center gap-3 px-4 pb-1 pt-2">
+          <Pressable
+            onPress={goBack}
+            hitSlop={8}
+            className="h-11 w-11 items-center justify-center active:scale-95"
+          >
+            <ChevronLeft size={24} color="#14323F" />
+          </Pressable>
+          <View className="flex-1">
+            <Text className="text-lg font-bold text-ink">My Leave</Text>
+            <Text className="text-xs text-slate-400">
+              Balances, requests & regularizations
+            </Text>
+          </View>
+          <Pressable
+            onPress={() => router.push('/notifications')}
+            hitSlop={8}
+            className="h-11 w-11 items-center justify-center active:scale-95"
+          >
+            <Bell size={22} color="#14323F" />
+            {unreadCount > 0 ? (
+              <View className="absolute right-2.5 top-2.5 h-2.5 w-2.5 rounded-full border-2 border-canvas bg-gold" />
+            ) : null}
+          </Pressable>
+        </View>
+
         {/* Horizontally-scrolling balance tiles */}
         <ScrollView
           horizontal
@@ -156,8 +173,13 @@ export default function LeaveOverviewScreen() {
           </Pressable>
         </View>
 
-        {/* Filter segmented control */}
-        <View className="mx-4 flex-row rounded-2xl bg-slate-200/70 p-1.5">
+        {/* Status filter — scrolls, since there are seven of them */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          className="grow-0"
+          contentContainerClassName="gap-2 px-4"
+        >
           {FILTERS.map((f) => {
             const active = filter === f;
             const count = f === 'All' ? null : counts[f];
@@ -165,23 +187,25 @@ export default function LeaveOverviewScreen() {
               <Pressable
                 key={f}
                 onPress={() => setFilter(f)}
-                className={`flex-1 items-center justify-center rounded-xl py-2.5 ${
-                  active ? 'bg-white' : ''
-                }`}
-                style={active ? cardShadow : undefined}
+                accessibilityRole="button"
+                accessibilityState={{ selected: active }}
+                className="h-8 items-center justify-center rounded-full border px-3.5"
+                style={{
+                  backgroundColor: active ? '#14323F' : '#FFFFFF',
+                  borderColor: active ? '#14323F' : 'rgba(13, 55, 73, 0.15)',
+                }}
               >
                 <Text
-                  className={`text-sm font-semibold ${
-                    active ? 'text-ink' : 'text-slate-500'
-                  }`}
+                  className="text-[13px] font-semibold"
+                  style={{ color: active ? '#FFFFFF' : 'rgba(13, 55, 73, 0.65)' }}
                 >
                   {f}
-                  {count != null ? ` · ${count}` : ''}
+                  {count ? ` · ${count}` : ''}
                 </Text>
               </Pressable>
             );
           })}
-        </View>
+        </ScrollView>
 
         {/* Request list */}
         <View className="gap-4 px-4 pt-4">

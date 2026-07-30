@@ -19,9 +19,9 @@ export default function EventRow({
   return (
     <Pressable
       onPress={() => onPress(event)}
-      style={cardShadow}
       accessibilityRole="button"
-      className="flex-row items-center gap-3 overflow-hidden rounded-[18px] border border-slate-100 bg-white p-3 active:scale-[0.99]"
+      style={cardShadow}
+      className="flex-row items-center gap-3 overflow-hidden rounded-[22px] border border-slate-100 bg-white p-4 active:scale-[0.99]"
     >
       <View
         className="h-10 w-1 rounded-full"

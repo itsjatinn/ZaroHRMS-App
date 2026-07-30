@@ -11,6 +11,19 @@ export const DEMO_CREDENTIALS = {
   },
 } as const;
 
+/**
+ * True when `organization` is the demo workspace. Sign-in uses this to skip the
+ * pre-flight tenant lookup: the demo org usually does not exist in the database,
+ * so verifying it would block the demo escape hatch before the user can ever
+ * reach the password step. Goes away with the rest of this file.
+ */
+export function isDemoOrganization(organization: string): boolean {
+  const normalized = organization.trim().toLowerCase();
+  return Object.values(DEMO_CREDENTIALS).some(
+    (credential) => credential.organization === normalized,
+  );
+}
+
 // Case-insensitive match on org + email, exact match on password.
 export function authenticateDemoLogin(
   organization: string,

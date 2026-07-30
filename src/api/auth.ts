@@ -67,6 +67,42 @@ export async function login(input: LoginInput): Promise<LoginSuccess> {
   return result;
 }
 
+export type TenantBrand = {
+  name: string;
+  slug: string;
+  logo: string | null;
+};
+
+/** Wire shape: the backend nests the tenant under `tenant` and adds a palette. */
+type TenantBrandResponse = {
+  tenant?: { name?: string; slug?: string; logo?: string | null };
+};
+
+/**
+ * Resolves an organization slug to its display name. Public endpoint (no bearer
+ * token), so it can run before sign-in — which lets the org be confirmed on
+ * the first step instead of failing later as an indistinguishable
+ * "Invalid credentials" from /auth/login.
+ *
+ * Throws ApiError(401) when no tenant has that slug. Always resolves to fully
+ * populated fields, so callers can never write an undefined back into state.
+ */
+export async function getTenantBrand(slug: string): Promise<TenantBrand> {
+  const normalized = slug.trim().toLowerCase();
+  const result = await api.get<TenantBrandResponse>(
+    `/auth/tenant-brand/${encodeURIComponent(normalized)}`,
+    { anonymous: true },
+  );
+  const tenant = result?.tenant;
+  return {
+    // Fall back to what was asked for rather than propagating undefined — an
+    // unexpected payload should not be able to blank the field the user typed.
+    name: tenant?.name?.trim() || normalized,
+    slug: tenant?.slug?.trim() || normalized,
+    logo: tenant?.logo ?? null,
+  };
+}
+
 /** Current user + tenant for an existing token (used to validate a session). */
 export function fetchMe() {
   return api.get<{

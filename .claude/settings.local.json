@@ -26,7 +26,12 @@
       "Bash(node -e \"const p=require\\('./package.json'\\);console.log\\(JSON.stringify\\({rnw:p.dependencies['react-native-web'],reanimated:p.dependencies['react-native-reanimated'],router:p.dependencies['expo-router'],expo:p.dependencies.expo},null,1\\)\\)\")",
       "Bash(cd \"C:/Users/itsaa/Desktop/Zaro-HRMS/backend\" && grep -n \"listen\\(\" -B 3 -A 3 src/main.ts | tail -20; echo \"=== health ===\"; sed -n '1,40p' src/health/*.controller.ts 2>/dev/null | head -40)",
       "PowerShell(npx tsc --noEmit; if \\($?\\) { \"typecheck ok\" }; \\(Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.InterfaceAlias -notmatch 'Loopback' -and $_.IPAddress -notmatch '^169\\\\.' } | Select-Object -ExpandProperty IPAddress\\) -join ', ')",
-      "PowerShell(foreach \\($p in 8081,8082\\) { $t = Test-NetConnection -ComputerName localhost -Port $p -WarningAction SilentlyContinue; \"port ${p}: $\\($t.TcpTestSucceeded\\)\" })"
+      "PowerShell(foreach \\($p in 8081,8082\\) { $t = Test-NetConnection -ComputerName localhost -Port $p -WarningAction SilentlyContinue; \"port ${p}: $\\($t.TcpTestSucceeded\\)\" })",
+      "Bash(echo \"exit: $?\")",
+      "Bash(echo \"app exit: $?\")",
+      "Bash(echo \"web exit: $?\")",
+      "Bash(sed -i '' \"s|'../../../../Users/jatin/Desktop/ZaroHRMS-App/src/components/announcements/announcementsData'|'/Users/jatin/Desktop/ZaroHRMS-App/src/components/announcements/announcementsData'|\" /private/tmp/claude-501/-Users-jatin-Desktop-ZaroHRMS-App/17fe1c55-3eae-444d-aee5-4fbfcede0f10/scratchpad/t.ts)",
+      "Bash(npx tsx *)"
     ]
   }
 }

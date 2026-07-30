@@ -21,14 +21,9 @@ type MenuItem = {
 
 const MENU: MenuItem[] = [
   {
-    label: 'Calendar',
+    label: 'Holidays',
     route: '/events',
     icon: (c) => <Feather name="calendar" size={20} color={c} />,
-  },
-  {
-    label: 'Holidays',
-    route: '/holidays',
-    icon: (c) => <Feather name="sun" size={20} color={c} />,
   },
   {
     label: 'Celebrations',
@@ -40,16 +35,18 @@ const MENU: MenuItem[] = [
     route: '/announcements',
     icon: (c) => <Ionicons name="megaphone-outline" size={20} color={c} />,
   },
-  {
-    label: 'Support',
-    route: '/support',
-    icon: (c) => <Feather name="help-circle" size={20} color={c} />,
-  },
-  {
-    label: 'Settings',
-    route: '/settings',
-    icon: (c) => <Feather name="settings" size={20} color={c} />,
-  },
+  // Support and Settings are hidden for now — both routes still exist, so
+  // restoring these entries is all that's needed to bring them back.
+  // {
+  //   label: 'Support',
+  //   route: '/support',
+  //   icon: (c) => <Feather name="help-circle" size={20} color={c} />,
+  // },
+  // {
+  //   label: 'Settings',
+  //   route: '/settings',
+  //   icon: (c) => <Feather name="settings" size={20} color={c} />,
+  // },
 ];
 
 export default function DrawerContent(props: DrawerContentComponentProps) {

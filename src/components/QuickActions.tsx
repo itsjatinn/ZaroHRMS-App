@@ -25,7 +25,7 @@ const ACTIONS: Action[] = [
   },
   {
     label: 'Holidays',
-    route: '/holidays',
+    route: '/events',
     tile: 'bg-rose-100',
     icon: <Feather name="calendar" size={18} color="#E0785C" />,
   },

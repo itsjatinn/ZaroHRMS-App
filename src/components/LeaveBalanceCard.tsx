@@ -1,147 +1,193 @@
-import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import { CalendarDays, History, Plus } from 'lucide-react-native';
+import { useMemo } from 'react';
 import { Pressable, Text, View } from 'react-native';
-import Svg, { Circle } from 'react-native-svg';
+
+import { useMyLeaveSummary } from '../api/leave';
+import { useAuth } from '../auth/AuthContext';
+import { cardShadow } from './shadow';
+
+/**
+ * Mirrors the web dashboard's LeaveBalanceWidget — a headline "remaining
+ * balance" tile beside the per-type available balances, then the three CTAs.
+ * Live sessions read /api/requests/mine/summary; the demo session shows the
+ * sample set.
+ */
 
 type LeaveType = {
+  id: string;
   label: string;
-  used: number;
-  total?: number;
+  /** Current closing balance after posted accruals and deductions. */
+  available: number;
   color: string;
 };
 
-const LEAVES: LeaveType[] = [
-  { label: 'Casual', used: 5, total: 12, color: '#E0785C' },
-  { label: 'Sick', used: 4, total: 7, color: '#57A773' },
-  { label: 'Earned', used: 5.5, total: 18, color: '#D9A53B' },
-  { label: 'Comp-off', used: 2, color: '#7C6FE0' },
+// Same rotation the web widget assigns balances by index.
+const COLORS = [
+  '#E07856',
+  '#5E9B7B',
+  '#D4A24A',
+  '#7C7BD8',
+  '#2F6D7F',
+  '#B96A00',
 ];
 
-const DAYS_LEFT = 22.5;
+/** Offline demo fallback — a live session reads /requests/mine/summary. */
+const BALANCES: LeaveType[] = [
+  { id: 'casual', label: 'Casual', available: 7, color: COLORS[0] },
+  { id: 'sick', label: 'Sick', available: 3, color: COLORS[1] },
+  { id: 'earned', label: 'Earned', available: 12.5, color: COLORS[2] },
+  { id: 'compoff', label: 'Comp-off', available: 1, color: COLORS[3] },
+];
 
-// Donut sizing
-const SIZE = 120;
-const STROKE = 16;
-const R = (SIZE - STROKE) / 2;
-const C = 2 * Math.PI * R;
-const GAP = 5; // px gap between segments
+const BRAND_PRIMARY = '#0D3749';
+const brandAlpha = (opacity: number) => `rgba(13, 55, 73, ${opacity})`;
+const secondaryAlpha = (opacity: number) => `rgba(249, 211, 107, ${opacity})`;
 
-function Donut() {
-  // Segments are sized by each type's total capacity (Comp-off defaults to 3).
-  const weights = LEAVES.map((l) => l.total ?? 3);
-  const sum = weights.reduce((a, b) => a + b, 0);
-
-  let offset = 0;
-  const segments = LEAVES.map((leave, i) => {
-    const frac = weights[i] / sum;
-    const arc = frac * C;
-    const seg = {
-      color: leave.color,
-      dash: Math.max(arc - GAP, 0),
-      offset,
-    };
-    offset += arc;
-    return seg;
-  });
-
-  return (
-    <View style={{ width: SIZE, height: SIZE }}>
-      <Svg width={SIZE} height={SIZE}>
-        {segments.map((s, i) => (
-          <Circle
-            key={i}
-            cx={SIZE / 2}
-            cy={SIZE / 2}
-            r={R}
-            fill="none"
-            stroke={s.color}
-            strokeWidth={STROKE}
-            strokeDasharray={`${s.dash} ${C}`}
-            strokeDashoffset={-s.offset}
-            strokeLinecap="butt"
-            // start at the top (12 o'clock) instead of 3 o'clock
-            transform={`rotate(-90 ${SIZE / 2} ${SIZE / 2})`}
-          />
-        ))}
-      </Svg>
-
-      {/* Center label */}
-      <View className="absolute inset-0 items-center justify-center">
-        <Text className="text-2xl font-bold text-ink">{DAYS_LEFT}</Text>
-        <Text className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
-          Days left
-        </Text>
-      </View>
-    </View>
-  );
+/** Whole numbers render bare; halves keep a single decimal. */
+function formatBalance(value: number): string {
+  return Number.isInteger(value)
+    ? String(value)
+    : value.toFixed(1).replace(/\.0$/, '');
 }
 
 export default function LeaveBalanceCard() {
   const router = useRouter();
+  // Demo session: no bearer token — the sample balances stand in rather than
+  // firing a request that would 401 and sign the user out.
+  const { isBackendSession } = useAuth();
+  const summary = useMyLeaveSummary(isBackendSession);
+
+  const balances = useMemo<LeaveType[]>(() => {
+    if (!isBackendSession) return BALANCES;
+    const rows = summary.data?.balances ?? [];
+    return rows.map((row, index) => ({
+      id: row.id,
+      label: row.name || row.code,
+      available: Math.max(0, Number(row.available ?? 0)),
+      color: COLORS[index % COLORS.length],
+    }));
+  }, [isBackendSession, summary.data]);
+
+  const remaining = useMemo(
+    () => balances.reduce((sum, leave) => sum + leave.available, 0),
+    [balances],
+  );
+
+  const year = Number(summary.data?.year) || new Date().getFullYear();
 
   return (
-    <View className="rounded-[24px] border border-slate-100 bg-white px-5 py-5">
-      <View className="flex-row items-center justify-between">
-        <View>
-          <Text className="text-base font-bold text-ink">Leave balance</Text>
-          <Text className="mt-0.5 text-xs font-medium text-slate-400">
-            FY26 entitlement usage
+    // Shared app card chrome — matches the Holidays page cards.
+    <View
+      style={cardShadow}
+      className="gap-4 rounded-[22px] border border-slate-100 bg-white px-5 py-5"
+    >
+      <Text className="text-[15px] font-bold" style={{ color: BRAND_PRIMARY }}>
+        Leave balance · FY{String(year).slice(-2)}
+      </Text>
+
+      <View className="flex-row items-center gap-4">
+        {/* Headline tile — the single number employees actually look for. */}
+        <View
+          className="w-[132px] justify-start gap-2 rounded-2xl border px-4 py-3.5"
+          style={{
+            minHeight: 132,
+            backgroundColor: secondaryAlpha(0.12),
+            borderColor: secondaryAlpha(0.22),
+          }}
+        >
+          <Text
+            className="text-[10px] font-bold uppercase tracking-wider"
+            style={{ color: brandAlpha(0.55) }}
+          >
+            Remaining balance
+          </Text>
+          <Text
+            className="text-[35px] font-bold leading-none"
+            style={{ color: BRAND_PRIMARY, letterSpacing: -1 }}
+          >
+            {formatBalance(remaining)}
           </Text>
         </View>
-        <View className="rounded-full bg-[#F1CE6C]/25 px-3 py-1">
-          <Text className="text-xs font-bold text-[#8A6816]">
-            {DAYS_LEFT} days left
-          </Text>
-        </View>
-      </View>
 
-      <View className="mt-5 flex-row items-center">
-        <Donut />
-
-        <View className="ml-5 flex-1 gap-3">
-          {LEAVES.map((leave, index) => (
-            <View
-              key={leave.label}
-              className={`flex-row items-center justify-between pb-2 ${
-                index === LEAVES.length - 1 ? '' : 'border-b border-slate-100'
-              }`}
-            >
-              <View className="flex-row items-center gap-2">
-                <View
-                  className="h-2.5 w-2.5 rounded-full"
-                  style={{ backgroundColor: leave.color }}
-                />
-                <Text className="text-sm text-slate-500">{leave.label}</Text>
-              </View>
-              <Text className="text-sm font-bold text-ink">
-                {leave.used}
-                {leave.total != null ? ` / ${leave.total}` : ''}
+        <View className="min-w-0 flex-1 gap-1.5">
+          {balances.length === 0 ? (
+            <Text className="text-sm" style={{ color: brandAlpha(0.55) }}>
+              {summary.isPending
+                ? 'Loading balances…'
+                : 'No leave balances available.'}
+            </Text>
+          ) : null}
+          {balances.map((leave) => (
+            <View key={leave.id} className="flex-row items-center gap-2.5">
+              <View
+                className="h-2 w-2 rounded-full"
+                style={{ backgroundColor: leave.color }}
+              />
+              <Text
+                className="min-w-0 flex-1 text-sm"
+                style={{ color: brandAlpha(0.78) }}
+                numberOfLines={1}
+              >
+                {leave.label}
+              </Text>
+              <Text
+                className="text-sm font-bold"
+                style={{ color: BRAND_PRIMARY }}
+              >
+                {formatBalance(leave.available)}
               </Text>
             </View>
           ))}
         </View>
       </View>
 
-      <View className="mt-5 flex-row gap-3">
+      {/* Apply leave spans the full width; the two ghost actions split the row
+          beneath it, same as the web widget's footer grid. */}
+      <View className="gap-2.5">
         <Pressable
           onPress={() => router.push('/apply-leave')}
-          className="h-11 flex-1 flex-row items-center justify-center gap-2 rounded-xl bg-[#14323F] px-4 transition duration-200 active:scale-[0.98] active:bg-[#D9A53B]"
+          accessibilityRole="button"
+          className="h-11 flex-row items-center justify-center gap-1.5 rounded-xl active:opacity-90"
+          style={{ backgroundColor: BRAND_PRIMARY }}
         >
-          <Feather name="plus" size={18} color="#FFFFFF" />
-          <Text className="text-sm font-bold text-white">Apply leave</Text>
+          <Plus size={14} color="#FFFFFF" />
+          <Text className="text-sm font-semibold text-white">Apply leave</Text>
         </Pressable>
 
-        <Pressable
-          onPress={() => router.push('/holidays')}
-          className="h-11 flex-1 flex-row items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 transition duration-200 active:scale-[0.98] active:bg-slate-50"
-        >
-          <MaterialCommunityIcons
-            name="beach"
-            size={18}
-            color="#14323F"
-          />
-          <Text className="text-sm font-bold text-ink">Holidays</Text>
-        </Pressable>
+        <View className="flex-row gap-2.5">
+          <Pressable
+            // A tab route, so navigate (not push) — push would stack a second
+            // copy instead of switching to the tab.
+            onPress={() => router.navigate('/leave')}
+            accessibilityRole="button"
+            className="h-11 flex-1 flex-row items-center justify-center gap-1.5 rounded-xl border bg-white active:opacity-70"
+            style={{ borderColor: brandAlpha(0.12) }}
+          >
+            <History size={14} color={BRAND_PRIMARY} />
+            <Text
+              className="text-sm font-semibold"
+              style={{ color: BRAND_PRIMARY }}
+            >
+              Leave history
+            </Text>
+          </Pressable>
+
+          <Pressable
+            onPress={() => router.push('/events')}
+            accessibilityRole="button"
+            className="h-11 flex-1 flex-row items-center justify-center gap-1.5 rounded-xl border bg-white active:opacity-70"
+            style={{ borderColor: brandAlpha(0.12) }}
+          >
+            <CalendarDays size={14} color={BRAND_PRIMARY} />
+            <Text
+              className="text-sm font-semibold"
+              style={{ color: BRAND_PRIMARY }}
+            >
+              Holidays
+            </Text>
+          </Pressable>
+        </View>
       </View>
     </View>
   );

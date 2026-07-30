@@ -3,25 +3,41 @@ import { Check, Eye, EyeOff, Pencil } from 'lucide-react-native';
 import { useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 
-import { login, toAppRole } from '../../src/api/auth';
+import { getTenantBrand, login, toAppRole } from '../../src/api/auth';
 import { ApiError, NetworkError } from '../../src/api/client';
 import { useAuth } from '../../src/auth/AuthContext';
-import { authenticateDemoLogin } from '../../src/auth/demoCredentials';
+import {
+  authenticateDemoLogin,
+  isDemoOrganization,
+} from '../../src/auth/demoCredentials';
 import AuthButton from '../../src/components/auth/AuthButton';
 import AuthField from '../../src/components/auth/AuthField';
 import AuthShell from '../../src/components/auth/AuthShell';
 import { Reveal, StaggerItem } from '../../src/components/auth/CardEntrance';
 import { font } from '../../src/components/auth/fonts';
-import { isValidEmail } from '../../src/components/auth/validate';
+import {
+  isValidEmail,
+  isValidOrgSlug,
+  normalizeOrgSlug,
+} from '../../src/components/auth/validate';
 
-type Errors = { email?: string; password?: string };
+type Errors = { org?: string; email?: string; password?: string };
 type Step = 'email' | 'password';
 
 export default function SignInScreen() {
   const { signIn, orgSlug, rememberedEmail } = useAuth();
-  // The organization slug is remembered silently (no field). Falls back to the
-  // default so the demo login keeps working.
-  const organization = orgSlug ?? 'zaro';
+
+  /**
+   * The backend requires a tenant slug on every login and returns a generic
+   * "Invalid credentials" when it doesn't resolve, so the org has to be a real
+   * field. Once a device has signed in successfully the slug is remembered and
+   * the field collapses into a summary row with a Change affordance — the same
+   * shape the web login takes when it can derive the slug from the subdomain.
+   */
+  const [org, setOrg] = useState(orgSlug ?? '');
+  const [editingOrg, setEditingOrg] = useState(orgSlug == null);
+  /** Organization name confirmed by the server, shown instead of the raw slug. */
+  const [orgName, setOrgName] = useState<string | null>(null);
 
   const [step, setStep] = useState<Step>('email');
   const [email, setEmail] = useState(rememberedEmail ?? '');
@@ -31,10 +47,22 @@ export default function SignInScreen() {
   const [errors, setErrors] = useState<Errors>({});
   const [formError, setFormError] = useState<string>();
   const [loading, setLoading] = useState(false);
+  const [checkingOrg, setCheckingOrg] = useState(false);
 
-  // Step 1 → 2: validate the email, then reveal the password block.
-  const handleContinue = () => {
+  // Step 1 → 2: validate the org + email, confirm the org exists, then reveal
+  // the password block.
+  const handleContinue = async () => {
     setFormError(undefined);
+
+    const slug = normalizeOrgSlug(org);
+    if (!slug) {
+      setErrors({ org: 'Organization is required.' });
+      return;
+    }
+    if (!isValidOrgSlug(slug)) {
+      setErrors({ org: 'Use lowercase letters, numbers and hyphens.' });
+      return;
+    }
     if (!email.trim()) {
       setErrors({ email: 'Email is required.' });
       return;
@@ -44,12 +72,54 @@ export default function SignInScreen() {
       return;
     }
     setErrors({});
+
+    // Resolve the slug before asking for a password, so a wrong organization is
+    // reported as exactly that rather than surfacing later as a password error.
+    //
+    // This lookup is advisory and must never be the only thing standing between
+    // the user and a sign-in attempt: only a definite 401 ("Tenant not found")
+    // blocks. An unreachable server, an unexpected status, or the demo
+    // workspace all fall through and let /auth/login decide — otherwise a
+    // flaky endpoint or the demo org, which usually isn't in the database,
+    // would lock the user out of a login that would have succeeded.
+    setCheckingOrg(true);
+    try {
+      const brand = await getTenantBrand(slug);
+      setOrgName(brand.name);
+      // Guarded: writing an undefined here would blank the field the user just
+      // filled in and crash the next render that trims it.
+      if (brand.slug) setOrg(brand.slug);
+    } catch (error) {
+      const notFound = error instanceof ApiError && error.status === 401;
+      if (notFound && !isDemoOrganization(slug)) {
+        // Open the field alongside the error — a returning user arrives here
+        // with the collapsed summary row, which has nowhere to show it.
+        setEditingOrg(true);
+        setOrgName(null);
+        setErrors({ org: `No organization found with the ID “${slug}”.` });
+        return;
+      }
+      setOrgName(null);
+    } finally {
+      setCheckingOrg(false);
+    }
+
+    setEditingOrg(false);
     setStep('password');
   };
 
-  // Back to editing the email.
+  // Back to editing the email (and the organization, if they need it).
   const editEmail = () => {
     setStep('email');
+    setPassword('');
+    setErrors({});
+    setFormError(undefined);
+  };
+
+  const editOrg = () => {
+    setStep('email');
+    setEditingOrg(true);
+    setOrgName(null);
     setPassword('');
     setErrors({});
     setFormError(undefined);
@@ -65,6 +135,7 @@ export default function SignInScreen() {
 
     // Signs in against the HRMS backend. Setting the session flips the root
     // guard and reveals the app.
+    const organization = normalizeOrgSlug(org);
     setLoading(true);
     try {
       const result = await login({
@@ -82,23 +153,31 @@ export default function SignInScreen() {
         tenant: result.tenant,
       });
     } catch (error) {
-      if (error instanceof ApiError) {
-        setFormError(
-          error.status === 401
-            ? error.message || 'Incorrect email or password.'
-            : error.message,
-        );
-        return;
-      }
-      // Backend unreachable (no dev server / wrong host): the demo credentials
-      // still open the app with mock data so the build stays demoable.
+      // Demo escape hatch: whenever the backend can't sign this user in —
+      // whether it's unreachable (NetworkError) or rejects the login
+      // (ApiError, e.g. the demo account doesn't exist in the DB) — the
+      // hardcoded demo credentials still open the app with mock data so the
+      // build stays demoable. Remove this whole block once real accounts exist.
       const demoRole = authenticateDemoLogin(organization, email, password);
-      if (error instanceof NetworkError && demoRole) {
+      if (demoRole) {
         await signIn(undefined, {
           orgSlug: organization,
           email: rememberMe ? email : null,
           role: demoRole,
         });
+        return;
+      }
+
+      if (error instanceof ApiError) {
+        // The org was resolved on the previous step, so a 401 here is about the
+        // email/password pair — not the workspace.
+        setFormError(
+          error.status === 401
+            ? orgName
+              ? `That email and password don't match an account at ${orgName}.`
+              : error.message || 'Incorrect email or password.'
+            : error.message,
+        );
         return;
       }
       setFormError(
@@ -124,6 +203,76 @@ export default function SignInScreen() {
             <Text className="text-sm text-rose-600">{formError}</Text>
           </View>
         ) : null}
+
+        {/* Organization — a real field until a slug has been confirmed, then a
+            compact summary row so returning users never retype it. */}
+        <StaggerItem>
+          {editingOrg ? (
+            <View>
+              <AuthField
+              label="Organization ID"
+              value={org}
+              onChangeText={(t) => {
+                setOrg(t);
+                if (errors.org) setErrors((e) => ({ ...e, org: undefined }));
+              }}
+              placeholder="your-company"
+              autoCapitalize="none"
+              autoCorrect={false}
+              autoComplete="organization"
+              spellCheck={false}
+              autoFocus={orgSlug == null}
+              editable={!loading && !checkingOrg}
+              error={errors.org}
+              returnKeyType="next"
+              />
+              {/* Without this, a first-time user has no way to know what the
+                  field wants — it isn't a name they'd guess. */}
+              {!errors.org ? (
+                <Text
+                  className="ml-1 mt-1.5 text-xs text-slate-500"
+                  style={{ fontFamily: font.regular }}
+                >
+                  The workspace name in your HRMS web address — e.g. “acme” in
+                  acme.zarohr.com. Ask your HR team if you&apos;re unsure.
+                </Text>
+              ) : null}
+            </View>
+          ) : (
+            <View className="flex-row items-center justify-between rounded-2xl border border-slate-200 bg-white px-4 py-3">
+              <View className="min-w-0 flex-1">
+                <Text
+                  className="text-xs text-slate-500"
+                  style={{ fontFamily: font.medium }}
+                >
+                  Organization
+                </Text>
+                <Text
+                  className="text-base text-ink"
+                  numberOfLines={1}
+                  style={{ fontFamily: font.semibold }}
+                >
+                  {orgName ?? normalizeOrgSlug(org)}
+                </Text>
+              </View>
+              <Pressable
+                onPress={editOrg}
+                hitSlop={8}
+                className="ml-3 shrink-0 flex-row items-center gap-1"
+                accessibilityRole="button"
+                accessibilityLabel="Change organization"
+              >
+                <Pencil size={15} color="#14323F" />
+                <Text
+                  className="text-sm text-ink"
+                  style={{ fontFamily: font.semibold }}
+                >
+                  Change
+                </Text>
+              </Pressable>
+            </View>
+          )}
+        </StaggerItem>
 
         {/* Email — always visible. On the password step it settles into a
             read-only summary row with an edit affordance. */}
@@ -161,10 +310,10 @@ export default function SignInScreen() {
               keyboardType="email-address"
               autoCapitalize="none"
               autoCorrect={false}
-              autoFocus
-              editable={!loading}
+              autoFocus={!editingOrg}
+              editable={!loading && !checkingOrg}
               error={errors.email}
-              onSubmitEditing={handleContinue}
+              onSubmitEditing={() => void handleContinue()}
               returnKeyType="next"
             />
           )}
@@ -256,11 +405,17 @@ export default function SignInScreen() {
                   ? loading
                     ? 'Signing in…'
                     : 'Sign in'
-                  : 'Continue'
+                  : checkingOrg
+                    ? 'Checking…'
+                    : 'Continue'
               }
-              onPress={onPassword ? handleSignIn : handleContinue}
-              loading={loading}
-              disabled={onPassword ? password.length === 0 : email.trim().length === 0}
+              onPress={onPassword ? handleSignIn : () => void handleContinue()}
+              loading={loading || checkingOrg}
+              disabled={
+                onPassword
+                  ? password.length === 0
+                  : !email?.trim() || !org?.trim()
+              }
             />
           </View>
         </StaggerItem>

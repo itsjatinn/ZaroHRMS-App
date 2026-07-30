@@ -11,6 +11,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 
+import { useAuth } from '../auth/AuthContext';
 import { currentUser } from '../data/currentUser';
 import { useUnreadCount } from './notifications/notificationsStore';
 
@@ -28,7 +29,9 @@ export default function Header() {
   const navigation = useNavigation();
   const router = useRouter();
   const unreadCount = useUnreadCount();
-  const firstName = currentUser.name.split(' ')[0];
+  // The signed-in employee's real name; the demo profile only as a fallback.
+  const { user } = useAuth();
+  const firstName = (user?.name ?? currentUser.name).trim().split(/\s+/)[0];
 
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -90,9 +93,11 @@ export default function Header() {
         accessibilityLabel="Open menu"
         className="mr-3 h-11 w-11 items-center justify-center active:scale-95"
       >
+        {/* Three left-aligned bars of stepped width. */}
         <View className="gap-[5px]">
           <View className="h-[2.5px] w-6 rounded-full bg-ink" />
-          <View className="h-[2.5px] w-4 rounded-full bg-ink" />
+          <View className="h-[2.5px] w-3.5 rounded-full bg-ink" />
+          <View className="h-[2.5px] w-5 rounded-full bg-ink" />
         </View>
       </Pressable>
 

@@ -63,7 +63,7 @@ export default function EventWeekGrid({
   return (
     <View
       style={cardShadow}
-      className="overflow-hidden rounded-[24px] border border-slate-100 bg-white"
+      className="overflow-hidden rounded-[22px] border border-slate-100 bg-white"
     >
       <View className="flex-row">
         {/* Pinned gutter — heights mirror the scrolling block row for row. */}

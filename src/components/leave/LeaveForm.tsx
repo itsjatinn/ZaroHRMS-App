@@ -12,17 +12,22 @@ import {
 } from 'react-native';
 
 import AttachmentField from '../requests/AttachmentField';
+import ReasonCounter from '../requests/ReasonCounter';
+import { REASON_MAX_LENGTH } from '../requests/requestReason';
 import { cardShadow } from '../shadow';
 import Dropdown from './Dropdown';
 import {
   DURATIONS,
-  LEAVE_TYPES,
   formatDate,
   type Duration,
   type LeaveType,
 } from './leaveData';
 
 type LeaveFormProps = {
+  /** Types this employee may apply for — see useApplicableLeaveTypes. */
+  types: LeaveType[];
+  /** Policy messages to show under the day count. */
+  notices?: { text: string; blocking: boolean }[];
   leaveType: LeaveType | null;
   onSelectType: (label: string) => void;
   fromDate: Date | null;
@@ -83,6 +88,8 @@ function formatDays(value: number) {
 }
 
 export default function LeaveForm({
+  types,
+  notices = [],
   leaveType,
   onSelectType,
   fromDate,
@@ -102,7 +109,7 @@ export default function LeaveForm({
   daysSelected,
   onApply,
 }: LeaveFormProps) {
-  const typeOptions = LEAVE_TYPES.map((t) => t.short);
+  const typeOptions = types.map((t) => t.short);
   const reasonRef = useRef<TextInput>(null);
   const [picker, setPicker] = useState<'from' | 'to' | null>(null);
 
@@ -115,7 +122,7 @@ export default function LeaveForm({
   };
 
   return (
-    <View style={cardShadow} className="rounded-[24px] border border-slate-100 bg-white p-5">
+    <View style={cardShadow} className="rounded-[22px] border border-slate-100 bg-white p-5">
       {/* Title */}
       <View className="flex-row items-center gap-3">
         <View className="h-10 w-10 items-center justify-center rounded-xl bg-blue-100">
@@ -186,6 +193,23 @@ export default function LeaveForm({
         </Text>
       ) : null}
 
+      {/* Policy notes. Blockers stop submission; warnings are advisory — the
+          server has the final say on the day count and limits. */}
+      {notices.length > 0 ? (
+        <View className="mt-3 gap-1.5">
+          {notices.map((notice) => (
+            <Text
+              key={notice.text}
+              className={`text-xs ${
+                notice.blocking ? 'text-rose-500' : 'text-amber-700'
+              }`}
+            >
+              • {notice.text}
+            </Text>
+          ))}
+        </View>
+      ) : null}
+
       {/* Reason */}
       <View className="mt-4">
         <FieldLabel required>Reason</FieldLabel>
@@ -197,11 +221,13 @@ export default function LeaveForm({
           placeholder="Share the reason for your leave request."
           placeholderTextColor="#94A3B8"
           multiline
+          maxLength={REASON_MAX_LENGTH}
           textAlignVertical="top"
           className={`min-h-24 rounded-xl border bg-white p-3.5 text-sm text-ink ${
             attempted && !reason.trim() ? 'border-red-400' : 'border-slate-200'
           }`}
         />
+        <ReasonCounter value={reason} />
       </View>
 
       {/* Attachment */}

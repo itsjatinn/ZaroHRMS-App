@@ -36,7 +36,7 @@ export default function ViewProfile() {
         {/* All sections in one unified accordion container */}
         <View
           style={cardShadow}
-          className="overflow-hidden rounded-[24px] border border-slate-100 bg-white"
+          className="overflow-hidden rounded-[22px] border border-slate-100 bg-white"
         >
           {PROFILE_SECTIONS.map((s, i) => (
             <SectionBlock

@@ -1,7 +1,11 @@
 import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useEffect, useState } from 'react';
 import type { ViewStyle } from 'react-native';
-import { Pressable, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, Text, View } from 'react-native';
+
+import { usePunch, useTodayAttendance } from '../api/attendance';
+import { ApiError } from '../api/client';
+import { useAuth } from '../auth/AuthContext';
 
 const YELLOW = '#F5D14E';
 const NAVY = '#14323F';
@@ -18,9 +22,46 @@ function pad(n: number) {
 }
 
 export default function ClockInCard() {
-  // false = not punched in yet (default), true = punched in
-  const [isPunchedIn, setIsPunchedIn] = useState(false);
+  // Demo session: no bearer token, so the card keeps a local toggle instead of
+  // firing requests that would 401 and sign the user out.
+  const { isBackendSession } = useAuth();
+  const today = useTodayAttendance(isBackendSession);
+  const punch = usePunch();
+  const [localPunchedIn, setLocalPunchedIn] = useState(false);
   const [now, setNow] = useState(new Date());
+
+  // Punched in = an open entry: in-stamp present, out-stamp absent. The
+  // backend's night-shift continuity keeps this true across midnight.
+  const isPunchedIn = isBackendSession
+    ? Boolean(today.data?.punchInAt && !today.data?.punchOutAt)
+    : localPunchedIn;
+
+  const punchTime = (value?: string | null) =>
+    value
+      ? new Date(value).toLocaleTimeString('en-IN', {
+          hour: '2-digit',
+          minute: '2-digit',
+        })
+      : null;
+
+  const handlePunch = () => {
+    if (!isBackendSession) {
+      setLocalPunchedIn((prev) => !prev);
+      return;
+    }
+    if (punch.isPending || today.isPending) return;
+    punch.mutate(isPunchedIn ? 'PUNCH_OUT' : 'PUNCH_IN');
+  };
+
+  // The office-network / device rules are enforced server-side with specific
+  // wording (e.g. "Punch in is allowed only from the office network") — show
+  // that, not a generic failure.
+  const punchError =
+    punch.error instanceof ApiError
+      ? punch.error.message
+      : punch.error
+        ? 'Could not reach the server. Try again.'
+        : null;
 
   useEffect(() => {
     const id = setInterval(() => setNow(new Date()), 1000);
@@ -62,13 +103,26 @@ export default function ClockInCard() {
             </Text>
           </View>
 
-          {/* Status note */}
-          <Text
-            className="mt-3 text-sm font-medium"
-            style={{ color: isPunchedIn ? '#6FCF97' : '#F08D7E' }}
-          >
-            {isPunchedIn ? 'Punched in successfully.' : 'Unable to punch in.'}
-          </Text>
+          {/* Status note — the server's own words when a punch is refused. */}
+          {punchError ? (
+            <Text className="mt-3 text-sm font-medium" style={{ color: '#F08D7E' }}>
+              {punchError}
+            </Text>
+          ) : isPunchedIn ? (
+            <Text className="mt-3 text-sm font-medium" style={{ color: '#6FCF97' }}>
+              {punchTime(today.data?.punchInAt)
+                ? `Punched in at ${punchTime(today.data?.punchInAt)}.`
+                : 'Punched in.'}
+            </Text>
+          ) : today.data?.punchOutAt ? (
+            <Text className="mt-3 text-sm font-medium text-white/50">
+              Done for the day — out at {punchTime(today.data.punchOutAt)}.
+            </Text>
+          ) : (
+            <Text className="mt-3 text-sm font-medium text-white/50">
+              Tap the button to punch in.
+            </Text>
+          )}
         </View>
 
         {/* Right: dashed ring + yellow punch button */}
@@ -81,13 +135,24 @@ export default function ClockInCard() {
           }}
         >
           <Pressable
-            onPress={() => setIsPunchedIn((prev) => !prev)}
+            onPress={handlePunch}
+            disabled={punch.isPending}
+            accessibilityRole="button"
+            accessibilityLabel={isPunchedIn ? 'Punch out' : 'Punch in'}
             className="h-28 w-28 items-center justify-center rounded-full transition duration-200 active:scale-95"
-            style={{ backgroundColor: YELLOW }}
+            style={{ backgroundColor: YELLOW, opacity: punch.isPending ? 0.7 : 1 }}
           >
-            <MaterialCommunityIcons name="fingerprint" size={40} color={NAVY} />
+            {punch.isPending ? (
+              <ActivityIndicator color={NAVY} />
+            ) : (
+              <MaterialCommunityIcons name="fingerprint" size={40} color={NAVY} />
+            )}
             <Text className="mt-1 text-xs font-extrabold tracking-wide text-[#14323F]">
-              {isPunchedIn ? 'PUNCH OUT' : 'PUNCH IN'}
+              {punch.isPending
+                ? 'WORKING…'
+                : isPunchedIn
+                  ? 'PUNCH OUT'
+                  : 'PUNCH IN'}
             </Text>
           </Pressable>
         </View>

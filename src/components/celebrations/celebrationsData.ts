@@ -1,13 +1,19 @@
-// Celebrations across the user's reporting tree — birthdays, work anniversaries
-// and new joiners. Mirrors the web panel's employee Celebrations section.
-// Mock data until /api/employees/me/celebrations lands.
+// Celebrations across the user's reporting tree — birthdays, work and wedding
+// anniversaries and new joiners. Mirrors the web panel's Celebrations page
+// exactly (types, palette, copy). Mock data until
+// /api/employees/me/celebrations lands.
 
-export type CelebrationKind = 'birthday' | 'anniversary' | 'newJoiner';
+export type CelebrationKind =
+  | 'birthday'
+  | 'anniversary'
+  | 'marriageAnniversary'
+  | 'newJoiner';
 
 export type Celebration = {
   id: string;
   employeeId: string;
   name: string;
+  companyName?: string | null;
   designation?: string;
   team?: string;
   /** ISO date of the celebration this year. */
@@ -21,57 +27,44 @@ export type Celebration = {
 };
 
 export type KindFilter = 'all' | CelebrationKind;
-export type RangeKey = 'today' | 'week' | 'month' | 'quarter';
 
-// Per-kind label, palette, the verb on the card's action button, the label once
-// a note has been sent, and the quick-pick messages offered in the composer.
-// The tints match the web panel so the two products read as one system.
+/** The upcoming list only looks this many days ahead — same as the web page. */
+export const UPCOMING_DAYS = 7;
+
+// Web dashboard palette (globals.css --brand-*) so the page matches exactly.
+export const BRAND_PRIMARY = '#0D3749';
+export const BRAND_SECONDARY = '#F9D36B';
+export const brandAlpha = (opacity: number) => `rgba(13, 55, 73, ${opacity})`;
+
+// Per-kind label, palette and the verb on the card's action button — the same
+// values as the web panel's KIND_META so the two products read as one system.
 export const KIND_META: Record<
   CelebrationKind,
-  {
-    label: string;
-    color: string;
-    bg: string;
-    action: string;
-    sent: string;
-    suggestions: string[];
-  }
+  { label: string; color: string; bg: string; action: string }
 > = {
   birthday: {
     label: 'Birthday',
     color: '#7C5CC6',
     bg: 'rgba(124, 92, 198, 0.14)',
     action: 'Wish',
-    sent: 'Wished',
-    suggestions: [
-      'Happy birthday! Hope you have a brilliant day 🎉',
-      'Many happy returns — enjoy your day!',
-      'Wishing you a fantastic year ahead 🎂',
-    ],
   },
   anniversary: {
     label: 'Work anniversary',
     color: '#3F7B58',
     bg: 'rgba(94, 155, 123, 0.18)',
     action: 'Cheers',
-    sent: 'Cheered',
-    suggestions: [
-      'Congratulations on the milestone — here is to many more!',
-      'Happy work anniversary! Great having you on the team 🎊',
-      'Thanks for everything you bring to the team. Congrats!',
-    ],
+  },
+  marriageAnniversary: {
+    label: 'Wedding anniversary',
+    color: '#C2497A',
+    bg: 'rgba(194, 73, 122, 0.14)',
+    action: 'Wish',
   },
   newJoiner: {
     label: 'New joiner',
     color: '#5B5AB8',
     bg: 'rgba(91, 90, 184, 0.16)',
     action: 'Say hi',
-    sent: 'Greeted',
-    suggestions: [
-      'Welcome aboard! Shout if you need anything 👋',
-      'Great to have you with us — looking forward to working together.',
-      'Welcome to Zaro! Happy to help you settle in.',
-    ],
   },
 };
 
@@ -79,23 +72,9 @@ export const KIND_OPTIONS: { value: KindFilter; label: string }[] = [
   { value: 'all', label: 'All celebrations' },
   { value: 'birthday', label: 'Birthdays' },
   { value: 'anniversary', label: 'Anniversaries' },
+  { value: 'marriageAnniversary', label: 'Wedding anniversaries' },
   { value: 'newJoiner', label: 'New joiners' },
 ];
-
-export const RANGE_OPTIONS: { value: RangeKey; label: string }[] = [
-  { value: 'today', label: 'Today' },
-  { value: 'week', label: 'This week' },
-  { value: 'month', label: 'This month' },
-  { value: 'quarter', label: 'Next 90 days' },
-];
-
-// How many days each range reaches forward from today.
-export const RANGE_DAYS: Record<RangeKey, number> = {
-  today: 0,
-  week: 7,
-  month: 30,
-  quarter: 90,
-};
 
 const DAY_MS = 86400000;
 
@@ -117,19 +96,45 @@ export function inNextNDays(iso: string, days: number): boolean {
   return t >= TODAY_MID.getTime() && t <= TODAY_MID.getTime() + days * DAY_MS;
 }
 
+// Same rotation the web panel hashes employees into when the API sends no
+// explicit avatar colour.
+const AVATAR_COLORS = [
+  '#84cc16',
+  '#6366f1',
+  '#f59e0b',
+  '#10b981',
+  '#ef4444',
+  '#8b5cf6',
+  '#0ea5e9',
+  '#f97316',
+  '#14b8a6',
+  '#ec4899',
+];
+
+export function avatarColorForEmployee(
+  employeeId: string,
+  fallback?: string,
+): string {
+  if (fallback) return fallback;
+  let hash = 0;
+  for (const char of employeeId) hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
+  return AVATAR_COLORS[hash % AVATAR_COLORS.length];
+}
+
 export const CELEBRATIONS: Celebration[] = [
-  { id: 'c1', employeeId: 'emp-anjali', name: 'Anjali Sharma', designation: 'Senior Engineer', team: 'Platform', date: offsetDays(0), kind: 'birthday', avatarBg: '#7C5CC6' },
-  { id: 'c2', employeeId: 'emp-vikram', name: 'Vikram K.', designation: 'Engineer II', team: 'Platform', date: offsetDays(0), kind: 'anniversary', years: 3, avatarBg: '#5E9B7B' },
-  { id: 'c3', employeeId: 'emp-rohit', name: 'Rohit M.', designation: 'Engineer I', team: 'Platform', date: offsetDays(0), kind: 'newJoiner', daysSinceJoin: 1, avatarBg: '#3D7BB6' },
-  { id: 'c4', employeeId: 'emp-priya', name: 'Priya N.', designation: 'Product Designer', team: 'Design', date: offsetDays(2), kind: 'birthday', avatarBg: '#D4A24A' },
-  { id: 'c5', employeeId: 'emp-karan', name: 'Karan V.', designation: 'QA Engineer', team: 'QA', date: offsetDays(3), kind: 'newJoiner', daysSinceJoin: 3, avatarBg: '#B04A2A' },
-  { id: 'c6', employeeId: 'emp-sanjay', name: 'Sanjay K.', designation: 'Engineer II', team: 'Platform', date: offsetDays(5), kind: 'anniversary', years: 1, avatarBg: '#7C5CC6' },
-  { id: 'c7', employeeId: 'emp-meera', name: 'Meera Rao', designation: 'Engineering Manager', team: 'Platform', date: offsetDays(8), kind: 'birthday', avatarBg: '#0D3749' },
-  { id: 'c8', employeeId: 'emp-ali', name: 'Ali Khan', designation: 'Account Executive', team: 'Sales', date: offsetDays(12), kind: 'anniversary', years: 2, avatarBg: '#5E9B7B' },
-  { id: 'c9', employeeId: 'emp-zara', name: 'Zara Khan', designation: 'Marketing Lead', team: 'Marketing', date: offsetDays(18), kind: 'birthday', avatarBg: '#B04A2A' },
-  { id: 'c10', employeeId: 'emp-arjun', name: 'Arjun T.', designation: 'Customer Success', team: 'CS', date: offsetDays(25), kind: 'newJoiner', avatarBg: '#5B5AB8' },
-  { id: 'c11', employeeId: 'emp-nisha', name: 'Nisha P.', designation: 'Finance Analyst', team: 'Finance', date: offsetDays(40), kind: 'anniversary', years: 5, avatarBg: '#D4A24A' },
-  { id: 'c12', employeeId: 'emp-divya', name: 'Divya G.', designation: 'HR Business Partner', team: 'People', date: offsetDays(55), kind: 'birthday', avatarBg: '#3F7B58' },
+  { id: 'c1', employeeId: 'emp-anjali', name: 'Anjali Sharma', designation: 'Senior Engineer', team: 'Platform', date: offsetDays(0), kind: 'birthday' },
+  { id: 'c2', employeeId: 'emp-vikram', name: 'Vikram K.', companyName: 'Zaro', designation: 'Engineer II', team: 'Platform', date: offsetDays(0), kind: 'anniversary', years: 3 },
+  { id: 'c3', employeeId: 'emp-rohit', name: 'Rohit M.', designation: 'Engineer I', team: 'Platform', date: offsetDays(0), kind: 'newJoiner', daysSinceJoin: 1 },
+  { id: 'c4', employeeId: 'emp-priya', name: 'Priya N.', designation: 'Product Designer', team: 'Design', date: offsetDays(2), kind: 'birthday' },
+  { id: 'c5', employeeId: 'emp-karan', name: 'Karan V.', designation: 'QA Engineer', team: 'QA', date: offsetDays(3), kind: 'newJoiner', daysSinceJoin: 3 },
+  { id: 'c13', employeeId: 'emp-neha', name: 'Neha D.', designation: 'Operations Manager', team: 'Ops', date: offsetDays(4), kind: 'marriageAnniversary', years: 2 },
+  { id: 'c6', employeeId: 'emp-sanjay', name: 'Sanjay K.', companyName: 'Zaro', designation: 'Engineer II', team: 'Platform', date: offsetDays(5), kind: 'anniversary', years: 1 },
+  { id: 'c7', employeeId: 'emp-meera', name: 'Meera Rao', designation: 'Engineering Manager', team: 'Platform', date: offsetDays(6), kind: 'birthday' },
+  { id: 'c8', employeeId: 'emp-ali', name: 'Ali Khan', companyName: 'Zaro', designation: 'Account Executive', team: 'Sales', date: offsetDays(7), kind: 'anniversary', years: 2 },
+  { id: 'c9', employeeId: 'emp-zara', name: 'Zara Khan', designation: 'Marketing Lead', team: 'Marketing', date: offsetDays(18), kind: 'birthday' },
+  { id: 'c10', employeeId: 'emp-arjun', name: 'Arjun T.', designation: 'Customer Success', team: 'CS', date: offsetDays(25), kind: 'newJoiner' },
+  { id: 'c11', employeeId: 'emp-nisha', name: 'Nisha P.', companyName: 'Zaro', designation: 'Finance Analyst', team: 'Finance', date: offsetDays(40), kind: 'anniversary', years: 5 },
+  { id: 'c12', employeeId: 'emp-divya', name: 'Divya G.', designation: 'HR Business Partner', team: 'People', date: offsetDays(55), kind: 'birthday' },
 ];
 
 /** First + last initial, e.g. "Anjali Sharma" → "AS". */
@@ -152,28 +157,46 @@ export function formatDayLabel(iso: string): string {
   return t.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
 }
 
+/** The weekday shown after the day label, e.g. "· Monday". */
 export function formatFullDate(iso: string): string {
-  return new Date(iso).toLocaleDateString('en-IN', {
-    weekday: 'long',
-    day: '2-digit',
-    month: 'short',
-  });
+  return new Date(iso).toLocaleDateString('en-IN', { weekday: 'long' });
 }
 
-/** The line under the name, e.g. "3 years at Zaro". */
+/** The pill line on the card, e.g. "3 years at Zaro". */
 export function metaLineFor(c: Celebration): string {
   switch (c.kind) {
     case 'birthday':
       return 'Birthday';
     case 'anniversary':
       return c.years
-        ? `${c.years} ${c.years === 1 ? 'year' : 'years'} at Zaro`
+        ? `${c.years} ${c.years === 1 ? 'year' : 'years'} at ${
+            c.companyName?.trim() || 'this company'
+          }`
         : 'Work anniversary';
+    case 'marriageAnniversary':
+      return c.years
+        ? `${c.years} ${c.years === 1 ? 'year' : 'years'} married`
+        : 'Wedding anniversary';
     case 'newJoiner':
       return c.daysSinceJoin && c.daysSinceJoin >= 1
-        ? `New joiner · Day ${c.daysSinceJoin}`
-        : 'New joiner';
+        ? `Joined ${c.daysSinceJoin} days ago`
+        : 'Joined today';
   }
+}
+
+/**
+ * Wishes open on the day itself; work anniversaries and new joiners stay
+ * open through the following 7 days — same rule as the web panel.
+ */
+export function isWishOpen(c: Celebration): boolean {
+  const date = new Date(c.date);
+  const start = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const end = new Date(start);
+  end.setDate(
+    start.getDate() +
+      (c.kind === 'anniversary' || c.kind === 'newJoiner' ? 7 : 0),
+  );
+  return TODAY_MID >= start && TODAY_MID <= end;
 }
 
 /** Stable day key used to group a sorted list into date sections. */

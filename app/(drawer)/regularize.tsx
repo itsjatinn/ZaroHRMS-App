@@ -4,7 +4,7 @@ import DateTimePicker, {
 import * as DocumentPicker from 'expo-document-picker';
 import { useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { CalendarDays, Clock3 } from 'lucide-react-native';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   findNodeHandle,
@@ -24,15 +24,25 @@ import {
 import BackButton from '../../src/components/BackButton';
 import Dropdown from '../../src/components/leave/Dropdown';
 import AttachmentField from '../../src/components/requests/AttachmentField';
+import ReasonCounter from '../../src/components/requests/ReasonCounter';
+import {
+  DEFAULT_REGULARIZE_POLICY,
+  evaluateRegularization,
+} from '../../src/components/requests/regularizePolicy';
+import { REASON_MAX_LENGTH } from '../../src/components/requests/requestReason';
 import { cardShadow } from '../../src/components/shadow';
 
-const REQUEST_TYPES = [
-  'Missed punch',
-  'Wrong in/out',
-  'Forgot to check in',
-  'Work outdoor',
-  'Work from home',
-] as const;
+/**
+ * The two types the HRMS offers, and only those.
+ *
+ * "Forgot to check in" was a duplicate of "Missed punch" — identical handling,
+ * and the label is display-only, never persisted. "Work outdoor" (On Duty) and
+ * "Work from home" are not regularizations at all: they have their own flows
+ * with their own allowance limits and approval-time day markers. Submitting
+ * them here filed a REGULARIZATION instead, which skipped those limits and
+ * marked the day PRESENT rather than ON_DUTY / WFH.
+ */
+const REQUEST_TYPES = ['Missed punch', 'Wrong in/out'] as const;
 
 const HOURS = Array.from({ length: 12 }, (_, index) =>
   String(index + 1).padStart(2, '0'),
@@ -231,6 +241,13 @@ export default function Regularize() {
   const [attachment, setAttachment] = useState<string | null>(null);
   const [attempted, setAttempted] = useState(false);
 
+  /**
+   * Tenant attendance rules. The app has no attendance-settings endpoint wired
+   * yet, so these are the permissive defaults — swapping in the real payload is
+   * a one-line change because evaluateRegularization takes them as an argument.
+   */
+  const policy = DEFAULT_REGULARIZE_POLICY;
+
   const scrollReasonToKeyboard = useCallback((target = reasonTargetRef.current) => {
     if (!target) return;
     setTimeout(() => {
@@ -287,18 +304,55 @@ export default function Regularize() {
     }
   };
 
+  /** 12-hour dropdowns -> "HH:mm", the form the policy rules compare on. */
+  const toClock = (
+    hour: string | null,
+    minute: string | null,
+    meridiem: string | null,
+  ): string => {
+    if (!hour || !minute || !meridiem) return '';
+    let h = Number(hour) % 12;
+    if (meridiem.toUpperCase().startsWith('P')) h += 12;
+    return `${String(h).padStart(2, '0')}:${minute}`;
+  };
+
+  const inTime = toClock(inHour, inMinute, inMeridiem);
+  const outTime = toClock(outHour, outMinute, outMeridiem);
+
+  // Every HRMS regularization rule, in the web's own order.
+  const evaluation = useMemo(
+    () =>
+      evaluateRegularization({
+        settings: policy,
+        type: requestType,
+        date,
+        inTime,
+        outTime,
+        reason,
+        hasAttachment: attachment !== null,
+        // Absent/locked/duplicate come from attendance data the app does not
+        // load yet, so they stay permissive rather than blocking wrongly. The
+        // backend still enforces all three.
+        isAbsent: true,
+        isLocked: false,
+        isDuplicate: false,
+        usedThisMonth: 0,
+        today: new Date(),
+      }),
+    [policy, requestType, date, inTime, outTime, reason, attachment],
+  );
+
   const submit = () => {
     setAttempted(true);
 
-    const missingTime =
-      !inHour ||
-      !inMinute ||
-      !inMeridiem ||
-      !outHour ||
-      !outMinute ||
-      !outMeridiem;
+    if (evaluation.blockers.length > 0) {
+      Alert.alert('Check your request', evaluation.blockers[0]);
+      return;
+    }
 
-    if (!requestType || !date || missingTime || !reason.trim()) return;
+    // The "fill all required fields" blocker already covers these; this narrows
+    // them for the compiler and guards against a rule being relaxed later.
+    if (!requestType || !date) return;
 
     const payload = {
       requestType,
@@ -339,7 +393,7 @@ export default function Regularize() {
 
         <View
           style={cardShadow}
-          className="rounded-[24px] border border-slate-100 bg-white p-5"
+          className="rounded-[22px] border border-slate-100 bg-white p-5"
         >
           <View>
             <FieldLabel required>Regularization Type</FieldLabel>
@@ -400,11 +454,13 @@ export default function Regularize() {
               placeholder="Share the reason for the regularization."
               placeholderTextColor="#94A3B8"
               multiline
+              maxLength={REASON_MAX_LENGTH}
               textAlignVertical="top"
               className={`min-h-40 rounded-2xl border bg-white p-4 text-base text-ink ${
                 attempted && !reason.trim() ? 'border-red-400' : 'border-slate-200'
               }`}
             />
+            <ReasonCounter value={reason} />
           </View>
 
           <View className={isWide ? 'mt-6 flex-row items-end gap-5' : 'mt-6 gap-5'}>

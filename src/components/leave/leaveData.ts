@@ -1,15 +1,21 @@
 // Shared types, leave-balance data, and small date helpers for the
 // Leave Application screen.
 
-export type LeaveKey = 'annual' | 'sick' | 'paternity' | 'casual';
+/**
+ * A leave type's id. Free-form because types are configured per tenant and
+ * arrive from /requests/settings — the old fixed union could not represent
+ * whatever HR has set up.
+ */
+export type LeaveKey = string;
 
 export type LeaveType = {
   key: LeaveKey;
   label: string; // e.g. "Annual Leave"
-  short: string; // dropdown / balance label, e.g. "Annual"
+  short: string; // dropdown / balance label
   remaining: number; // days still available
 };
 
+/** Offline demo fallback only — real types come from useApplicableLeaveTypes. */
 export const LEAVE_TYPES: LeaveType[] = [
   { key: 'annual', label: 'Annual Leave', short: 'Annual', remaining: 6 },
   { key: 'sick', label: 'Sick Leave', short: 'Sick', remaining: 8 },

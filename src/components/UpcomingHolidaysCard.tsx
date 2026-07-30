@@ -3,6 +3,8 @@ import { useRouter } from 'expo-router';
 import { Fragment } from 'react';
 import { Pressable, Text, View } from 'react-native';
 
+import { cardShadow } from './shadow';
+
 const FEATURED = {
   day: '23',
   month: 'JUN',
@@ -52,11 +54,14 @@ export default function UpcomingHolidaysCard() {
   const router = useRouter();
 
   return (
-    <View className="rounded-[24px] border border-slate-100 bg-white px-5 py-5">
+    <View
+      style={cardShadow}
+      className="rounded-[22px] border border-slate-100 bg-white px-5 py-5"
+    >
       <View className="flex-row items-center justify-between">
         <Text className="text-base font-bold text-ink">Upcoming holidays</Text>
         <Pressable
-          onPress={() => router.push('/holidays')}
+          onPress={() => router.push('/events')}
           hitSlop={8}
           className="flex-row items-center gap-1"
         >

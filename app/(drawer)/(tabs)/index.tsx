@@ -11,6 +11,8 @@ import Animated, {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import Header from '../../../src/components/Header';
+import PulseCard from '../../../src/components/PulseCard';
+import PulseCelebrationOverlay from '../../../src/components/pulse/PulseCelebrationOverlay';
 import ProfileCompletionCard, {
   PROFILE_INCOMPLETE,
 } from '../../../src/components/ProfileCompletionCard';
@@ -19,9 +21,7 @@ import { EXIT_DURATION, EXIT_EASING, LAND_RISE } from '../../../src/components/m
 import ClockInCard from '../../../src/components/ClockInCard';
 import LeaveBalanceCard from '../../../src/components/LeaveBalanceCard';
 import AttendanceCalendarCard from '../../../src/components/AttendanceCalendarCard';
-import UpcomingHolidaysCard from '../../../src/components/UpcomingHolidaysCard';
-import TeamTodayCard from '../../../src/components/TeamTodayCard';
-import CelebrationsCard from '../../../src/components/CelebrationsCard';
+import QuickActionsCard from '../../../src/components/quickActions/QuickActionsCard';
 
 // Shown once per app launch while the profile is incomplete. This module-level
 // latch resets when the app process restarts, so it reappears next open.
@@ -113,7 +113,7 @@ export default function Index() {
   return (
     <SafeAreaView
       edges={['top', 'left', 'right']}
-      style={{ flex: 1, backgroundColor: '#F6F7F4' }}
+      className="flex-1 bg-canvas"
     >
       <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
         {/* gap-5 keeps steady spacing between home sections. The SafeAreaView
@@ -124,6 +124,7 @@ export default function Index() {
           style={{ paddingTop: 8, paddingBottom: insets.bottom + 112 }}
         >
           <Header />
+          <PulseCard />
           {!cardDismissed ? (
             <ProfileCardSlot
               hidden={showPopup && !dismissing}
@@ -137,15 +138,13 @@ export default function Index() {
 
           <AttendanceCalendarCard />
 
-          <UpcomingHolidaysCard />
-
-          {/* Team today + Celebrations sit side by side */}
-          <View className="flex-row gap-4">
-            <TeamTodayCard />
-            <CelebrationsCard />
-          </View>
+          <QuickActionsCard />
         </View>
       </ScrollView>
+
+      {/* Outside the ScrollView so the burst spans the whole screen instead of
+          being clipped to the scroll bounds. */}
+      <PulseCelebrationOverlay />
 
       {showPopup ? (
         <ProfileCompletionOverlay

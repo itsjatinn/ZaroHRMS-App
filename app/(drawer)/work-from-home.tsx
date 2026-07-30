@@ -17,9 +17,14 @@ import {
   useSafeAreaInsets,
 } from 'react-native-safe-area-context';
 
+import { useWorkRequestAllowance } from '../../src/api/workRequests';
+import { useAuth } from '../../src/auth/AuthContext';
 import BackButton from '../../src/components/BackButton';
+import BalanceTile from '../../src/components/leave/BalanceTile';
 import Dropdown from '../../src/components/leave/Dropdown';
 import AttachmentField from '../../src/components/requests/AttachmentField';
+import ReasonCounter from '../../src/components/requests/ReasonCounter';
+import { REASON_MAX_LENGTH } from '../../src/components/requests/requestReason';
 import {
   DateField,
   FieldLabel,
@@ -27,7 +32,8 @@ import {
 } from '../../src/components/requests/RequestFields';
 import { cardShadow } from '../../src/components/shadow';
 
-const APPLICATION_TYPES = ['Work from home', 'Work outdoor'] as const;
+// "Work outdoor" is called On duty in the HRMS — same request, current name.
+const APPLICATION_TYPES = ['Work from home', 'On duty'] as const;
 const DAY_TYPES = ['Full Day', 'First Half', 'Second Half'] as const;
 const REASON_KEYBOARD_OFFSET = 85;
 
@@ -85,6 +91,7 @@ export default function WorkFromHome() {
   const reasonTargetRef = useRef<number | null>(null);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
 
+  const { isBackendSession } = useAuth();
   const [applicationType, setApplicationType] = useState<string | null>('Work from home');
   const [fromDate, setFromDate] = useState<Date | null>(null);
   const [toDate, setToDate] = useState<Date | null>(null);
@@ -100,7 +107,30 @@ export default function WorkFromHome() {
     fromDuration,
     toDuration,
   });
-  const applicationLabel = applicationType === 'Work outdoor' ? 'WO' : 'WFM';
+  // OD / WFH are the HRMS's own short codes. The previous 'WO' clashed with
+  // Weekly Off, and 'WFM' was a typo for WFH.
+  const applicationLabel = applicationType === 'On duty' ? 'OD' : 'WFH';
+
+  // WFH and On duty each carry their own HR-set allowance, capped per week or
+  // per month. Both are fetched so the tiles can be compared side by side; the
+  // date matters because limits resolve against the period it falls in.
+  const wfhAllowance = useWorkRequestAllowance('WFH', fromDate, isBackendSession);
+  const odAllowance = useWorkRequestAllowance('OD', fromDate, isBackendSession);
+
+  const allowanceTiles = [
+    {
+      type: 'Work from home' as const,
+      label: 'Work from home',
+      accent: '#5B5AB8',
+      allowance: wfhAllowance.data ?? null,
+    },
+    {
+      type: 'On duty' as const,
+      label: 'On duty',
+      accent: '#3F7B58',
+      allowance: odAllowance.data ?? null,
+    },
+  ];
 
   const scrollReasonToKeyboard = useCallback((target = reasonTargetRef.current) => {
     if (!target) return;
@@ -158,9 +188,34 @@ export default function WorkFromHome() {
     }
   };
 
+  /** The allowance for the type currently chosen. */
+  const selectedAllowance =
+    allowanceTiles.find((tile) => tile.type === applicationType)?.allowance ??
+    null;
+
   const submit = () => {
     setAttempted(true);
     if (!applicationType || !fromDate || !toDate || !reason.trim()) return;
+
+    if (startOfDay(toDate) < startOfDay(fromDate)) {
+      Alert.alert('Check your dates', 'The end date must be on or after the start date.');
+      return;
+    }
+
+    // The backend rejects anything over the HR-set cap (e.g. "exceeds the WFH
+    // limit of 2/week"), so catch it here with the same numbers rather than
+    // letting the employee fill the form in and fail on submit.
+    const remaining = selectedAllowance?.remaining;
+    if (typeof remaining === 'number' && daysSelected > remaining) {
+      const period = selectedAllowance?.period === 'WEEKLY' ? 'week' : 'month';
+      Alert.alert(
+        'Allowance exceeded',
+        remaining === 0
+          ? `You have no ${applicationLabel} days left this ${period}.`
+          : `You have ${formatDays(remaining)} ${applicationLabel} day(s) left this ${period}, but this request is for ${formatDays(daysSelected)}.`,
+      );
+      return;
+    }
 
     const payload = {
       applicationType,
@@ -196,9 +251,26 @@ export default function WorkFromHome() {
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
+        {/* Allowance tiles — tapping one picks that request type, the same way
+            the leave balance tiles work. */}
+        <View className="mb-4 flex-row gap-3">
+          {allowanceTiles.map((tile) => (
+            <BalanceTile
+              key={tile.type}
+              label={`${tile.label}${
+                tile.allowance?.period === 'WEEKLY' ? ' / week' : ' / month'
+              }`}
+              value={tile.allowance?.remaining ?? 0}
+              accent={tile.accent}
+              selected={applicationType === tile.type}
+              onPress={() => setApplicationType(tile.type)}
+            />
+          ))}
+        </View>
+
         <View
           style={cardShadow}
-          className="rounded-[24px] border border-slate-100 bg-white p-5"
+          className="rounded-[22px] border border-slate-100 bg-white p-5"
         >
           <View>
             <FieldLabel required>Application Type</FieldLabel>
@@ -274,11 +346,13 @@ export default function WorkFromHome() {
               placeholder="Share the reason for your request."
               placeholderTextColor="#94A3B8"
               multiline
+              maxLength={REASON_MAX_LENGTH}
               textAlignVertical="top"
               className={`min-h-32 rounded-xl border bg-white p-3.5 text-sm text-ink ${
                 attempted && !reason.trim() ? 'border-red-400' : 'border-slate-200'
               }`}
             />
+            <ReasonCounter value={reason} />
           </View>
 
           <View className={isWide ? 'mt-6 flex-row items-end gap-5' : 'mt-6 gap-5'}>

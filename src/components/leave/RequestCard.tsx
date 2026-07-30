@@ -5,7 +5,18 @@ import { Pressable, Text, View } from 'react-native';
 
 import { cardShadow } from '../shadow';
 
-export type RequestStatus = 'Approved' | 'Pending' | 'Rejected';
+/**
+ * The full set the HRMS tracks. Cancellation is its own small workflow: an
+ * employee asks, HR decides, and the request ends up cancelled or with the
+ * cancellation rejected (leaving the original approval standing).
+ */
+export type RequestStatus =
+  | 'Approved'
+  | 'Pending'
+  | 'Rejected'
+  | 'Cancelled'
+  | 'Cancellation requested'
+  | 'Cancellation rejected';
 
 type RequestCardProps = {
   type: string; // e.g. "Annual Leave"
@@ -37,6 +48,21 @@ const STATUS_STYLES: Record<
     pill: 'bg-red-50',
     text: 'text-red-700',
     dot: '#DC2626',
+  },
+  Cancelled: {
+    pill: 'bg-slate-100',
+    text: 'text-slate-600',
+    dot: '#64748B',
+  },
+  'Cancellation requested': {
+    pill: 'bg-violet-50',
+    text: 'text-violet-700',
+    dot: '#7C5CC6',
+  },
+  'Cancellation rejected': {
+    pill: 'bg-orange-50',
+    text: 'text-orange-700',
+    dot: '#B04A2A',
   },
 };
 

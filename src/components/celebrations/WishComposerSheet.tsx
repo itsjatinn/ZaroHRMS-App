@@ -1,26 +1,40 @@
-import { Send, X } from 'lucide-react-native';
+import {
+  Cake,
+  Hand,
+  Heart,
+  PartyPopper,
+} from 'lucide-react-native';
 import { useEffect, useState } from 'react';
 import {
   KeyboardAvoidingView,
   Modal,
   Platform,
   Pressable,
-  ScrollView,
   Text,
   TextInput,
   View,
 } from 'react-native';
 
-import { cardShadow } from '../shadow';
 import {
-  formatDayLabel,
-  initialsFor,
+  BRAND_PRIMARY,
+  brandAlpha,
   KIND_META,
-  metaLineFor,
   type Celebration,
+  type CelebrationKind,
 } from './celebrationsData';
 
-const MAX_LENGTH = 240;
+// Same cap as the web composer.
+const MAX_LENGTH = 200;
+
+const KIND_ICON: Record<
+  CelebrationKind,
+  (color: string, size: number) => React.ReactNode
+> = {
+  birthday: (color, size) => <Cake size={size} color={color} />,
+  anniversary: (color, size) => <PartyPopper size={size} color={color} />,
+  marriageAnniversary: (color, size) => <Heart size={size} color={color} />,
+  newJoiner: (color, size) => <Hand size={size} color={color} />,
+};
 
 type WishComposerSheetProps = {
   celebration: Celebration | null;
@@ -28,8 +42,8 @@ type WishComposerSheetProps = {
   onClose: () => void;
 };
 
-// Opened by the action button on a celebration card. Offers per-kind quick
-// picks, an editable note and a send action.
+// Opened by the action button on a celebration card. Mirrors the web panel's
+// "Write a wish" dialog, anchored to the bottom edge as on small screens.
 export default function WishComposerSheet({
   celebration,
   onSend,
@@ -37,16 +51,16 @@ export default function WishComposerSheet({
 }: WishComposerSheetProps) {
   const [message, setMessage] = useState('');
 
-  // Each newly opened card starts from its own kind's first quick pick.
+  // Every newly opened card starts from an empty draft.
   useEffect(() => {
-    setMessage(celebration ? KIND_META[celebration.kind].suggestions[0] : '');
+    setMessage('');
   }, [celebration]);
 
   if (!celebration) return null;
 
   const meta = KIND_META[celebration.kind];
   const trimmed = message.trim();
-  const canSend = trimmed.length > 0;
+  const remaining = MAX_LENGTH - message.length;
 
   return (
     <Modal visible transparent animationType="fade" onRequestClose={onClose}>
@@ -54,106 +68,94 @@ export default function WishComposerSheet({
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         className="flex-1"
       >
-        <Pressable className="flex-1 justify-end bg-black/45" onPress={onClose}>
-          <Pressable className="max-h-[88%] rounded-t-[28px] bg-white px-5 pb-7">
-            <View className="mt-3 h-1 w-10 self-center rounded-full bg-slate-200" />
-
-            <ScrollView
-              showsVerticalScrollIndicator={false}
-              keyboardShouldPersistTaps="handled"
-            >
-              {/* Who this is going to */}
-              <View className="mt-4 flex-row items-center gap-3">
-                <View
-                  className="h-12 w-12 items-center justify-center rounded-2xl"
-                  style={{ backgroundColor: celebration.avatarBg ?? '#14323F' }}
-                >
-                  <Text className="text-sm font-bold text-white">
-                    {initialsFor(celebration.name)}
-                  </Text>
-                </View>
-                <View className="min-w-0 flex-1">
-                  <Text className="text-[17px] font-bold text-ink" numberOfLines={1}>
-                    {celebration.name}
-                  </Text>
-                  <Text className="text-xs text-slate-400" numberOfLines={1}>
-                    {metaLineFor(celebration)} · {formatDayLabel(celebration.date)}
-                  </Text>
-                </View>
-                <Pressable
-                  onPress={onClose}
-                  hitSlop={8}
-                  accessibilityRole="button"
-                  accessibilityLabel="Close"
-                  className="h-9 w-9 items-center justify-center rounded-full bg-slate-100 active:scale-95"
-                >
-                  <X size={17} color="#14323F" />
-                </Pressable>
-              </View>
-
-              {/* Quick picks */}
-              <Text className="mt-5 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-                Quick picks
-              </Text>
-              <View className="mt-2.5 gap-2">
-                {meta.suggestions.map((suggestion) => {
-                  const active = suggestion === message;
-                  return (
-                    <Pressable
-                      key={suggestion}
-                      onPress={() => setMessage(suggestion)}
-                      className="rounded-2xl border px-3.5 py-3 active:scale-[0.99]"
-                      style={{
-                        borderColor: active ? meta.color + '66' : '#E2E8F0',
-                        backgroundColor: active ? meta.bg : '#FFFFFF',
-                      }}
-                    >
-                      <Text className="text-[13px] text-ink">{suggestion}</Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
-
-              {/* Editable note */}
-              <Text className="mt-5 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-                Your note
-              </Text>
-              <View className="mt-2.5 rounded-2xl border border-slate-200 bg-white px-3.5 py-3">
-                <TextInput
-                  value={message}
-                  onChangeText={setMessage}
-                  placeholder={`Write something to ${celebration.name.split(' ')[0]}…`}
-                  placeholderTextColor="#94A3B8"
-                  multiline
-                  maxLength={MAX_LENGTH}
-                  className="min-h-[76px] text-sm leading-5 text-ink"
-                  textAlignVertical="top"
-                />
-              </View>
-              <Text className="mt-1.5 self-end text-[11px] text-slate-400">
-                {message.length}/{MAX_LENGTH}
-              </Text>
-
-              <Pressable
-                onPress={() => onSend(celebration, trimmed)}
-                disabled={!canSend}
-                accessibilityRole="button"
-                accessibilityState={{ disabled: !canSend }}
-                style={canSend ? cardShadow : undefined}
-                className={`mt-4 h-12 flex-row items-center justify-center gap-2 rounded-2xl ${
-                  canSend ? 'bg-[#14323F] active:scale-95' : 'bg-slate-200'
-                }`}
-              >
-                <Send size={15} color={canSend ? '#FFFFFF' : '#94A3B8'} />
+        <Pressable
+          className="flex-1 justify-end p-3"
+          style={{ backgroundColor: 'rgba(15, 23, 42, 0.28)' }}
+          onPress={onClose}
+        >
+          <Pressable
+            className="rounded-xl border bg-white p-4"
+            style={{ borderColor: brandAlpha(0.12) }}
+          >
+            {/* Who the wish goes to + the occasion pill */}
+            <View className="mb-3.5 flex-row items-start justify-between gap-3">
+              <View className="min-w-0 flex-1">
                 <Text
-                  className={`text-sm font-semibold ${
-                    canSend ? 'text-white' : 'text-slate-400'
-                  }`}
+                  className="text-base font-bold"
+                  style={{ color: BRAND_PRIMARY }}
                 >
-                  Send {meta.label.toLowerCase()} note
+                  Write a wish
+                </Text>
+                <Text
+                  className="mt-0.5 text-[13px] font-semibold"
+                  style={{ color: brandAlpha(0.58) }}
+                  numberOfLines={1}
+                >
+                  {celebration.name}
+                </Text>
+              </View>
+              <View
+                className="flex-row items-center gap-1 rounded-full px-2.5 py-[3px]"
+                style={{ backgroundColor: meta.bg }}
+              >
+                {KIND_ICON[celebration.kind](meta.color, 13)}
+                <Text
+                  className="text-[11px] font-bold"
+                  style={{ color: meta.color }}
+                >
+                  {meta.label}
+                </Text>
+              </View>
+            </View>
+
+            <TextInput
+              value={message}
+              onChangeText={setMessage}
+              placeholder="Type your message..."
+              placeholderTextColor={brandAlpha(0.45)}
+              multiline
+              autoFocus
+              maxLength={MAX_LENGTH}
+              className="min-h-[140px] rounded-[10px] border p-3 text-sm leading-[21px]"
+              style={{ borderColor: brandAlpha(0.14), color: BRAND_PRIMARY }}
+              textAlignVertical="top"
+            />
+
+            <Text
+              className="mt-3 text-xs font-semibold"
+              style={{ color: brandAlpha(0.5) }}
+            >
+              {remaining} characters left
+            </Text>
+            <View className="mt-2 flex-row justify-end gap-2">
+              <Pressable
+                onPress={onClose}
+                accessibilityRole="button"
+                className="rounded-lg border bg-white px-3.5 py-2 active:opacity-70"
+                style={{ borderColor: brandAlpha(0.12) }}
+              >
+                <Text
+                  className="text-[13px] font-bold"
+                  style={{ color: BRAND_PRIMARY }}
+                >
+                  Cancel
                 </Text>
               </Pressable>
-            </ScrollView>
+              <Pressable
+                onPress={() => onSend(celebration, trimmed)}
+                disabled={!trimmed}
+                accessibilityRole="button"
+                accessibilityState={{ disabled: !trimmed }}
+                className={`rounded-lg px-3.5 py-2 active:opacity-70 ${
+                  trimmed ? '' : 'opacity-55'
+                }`}
+                style={{ backgroundColor: BRAND_PRIMARY }}
+              >
+                <Text className="text-[13px] font-bold text-white">
+                  Send wish
+                </Text>
+              </Pressable>
+            </View>
           </Pressable>
         </Pressable>
       </KeyboardAvoidingView>

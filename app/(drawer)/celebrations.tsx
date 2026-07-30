@@ -1,14 +1,7 @@
 import { useRouter } from 'expo-router';
-import { PartyPopper, Search, Sparkles, X } from 'lucide-react-native';
+import { Sparkles } from 'lucide-react-native';
 import { useMemo, useState } from 'react';
-import {
-  Alert,
-  Pressable,
-  ScrollView,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { Pressable, ScrollView, Text, View } from 'react-native';
 import {
   SafeAreaView,
   useSafeAreaInsets,
@@ -17,60 +10,51 @@ import {
 import BackButton from '../../src/components/BackButton';
 import CelebrationCard from '../../src/components/celebrations/CelebrationCard';
 import {
+  BRAND_PRIMARY,
+  BRAND_SECONDARY,
+  brandAlpha,
   CELEBRATIONS,
   dayKey,
   formatDayLabel,
   formatFullDate,
   inNextNDays,
-  KIND_META,
   KIND_OPTIONS,
-  RANGE_DAYS,
-  RANGE_OPTIONS,
+  UPCOMING_DAYS,
   type Celebration,
   type KindFilter,
-  type RangeKey,
 } from '../../src/components/celebrations/celebrationsData';
 import WishComposerSheet from '../../src/components/celebrations/WishComposerSheet';
-import Dropdown from '../../src/components/leave/Dropdown';
-import { cardShadow } from '../../src/components/shadow';
-
-const RANGE_LABELS = RANGE_OPTIONS.map((o) => o.label);
 
 export default function Celebrations() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
 
   const [kind, setKind] = useState<KindFilter>('all');
-  const [range, setRange] = useState<RangeKey>('month');
-  const [query, setQuery] = useState('');
   const [composing, setComposing] = useState<Celebration | null>(null);
   /** Ids already wished this session — keeps the card's sent state sticky. */
   const [wished, setWished] = useState<Set<string>>(() => new Set());
 
-  const rangeLabel =
-    RANGE_OPTIONS.find((o) => o.value === range)?.label ?? 'This month';
-
   // Everything happening today gets its own hero strip, so it is excluded
   // from the upcoming list below to avoid showing the same person twice.
+  // The type filter applies here too — a chip that hid only half the page
+  // read as broken.
   const todayItems = useMemo(
-    () => CELEBRATIONS.filter((c) => inNextNDays(c.date, 0)),
-    [],
+    () =>
+      CELEBRATIONS.filter((c) => {
+        if (!inNextNDays(c.date, 0)) return false;
+        return kind === 'all' || c.kind === kind;
+      }),
+    [kind],
   );
 
   const upcoming = useMemo(() => {
-    const q = query.trim().toLowerCase();
     return CELEBRATIONS.filter((c) => {
-      if (!inNextNDays(c.date, RANGE_DAYS[range])) return false;
+      if (!inNextNDays(c.date, UPCOMING_DAYS)) return false;
       if (inNextNDays(c.date, 0)) return false;
       if (kind !== 'all' && c.kind !== kind) return false;
-      if (!q) return true;
-      return (
-        c.name.toLowerCase().includes(q) ||
-        (c.designation ?? '').toLowerCase().includes(q) ||
-        (c.team ?? '').toLowerCase().includes(q)
-      );
+      return true;
     }).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-  }, [kind, query, range]);
+  }, [kind]);
 
   // Collapse the sorted list into one section per day so it reads as a timeline.
   const grouped = useMemo(() => {
@@ -86,7 +70,8 @@ export default function Celebrations() {
 
   const openProfile = () => router.push('/view-profile');
 
-  // Mock send — the real flow will post to /api/celebrations/{id}/wish.
+  // Mock send — the real flow will post to /api/celebrations/{id}/wish. The
+  // card flips into its sent state, same as the web page.
   const sendWish = (c: Celebration) => {
     setWished((prev) => {
       const next = new Set(prev);
@@ -94,111 +79,74 @@ export default function Celebrations() {
       return next;
     });
     setComposing(null);
-    Alert.alert(
-      `${KIND_META[c.kind].label} note sent`,
-      `Your note has been sent to ${c.name}.`,
-    );
   };
 
   return (
     <SafeAreaView edges={['top', 'left', 'right']} className="flex-1 bg-canvas">
-      <View className="z-10">
-        <View className="flex-row items-end gap-2 pr-4">
-          <View className="flex-1">
-            <BackButton
-              title="Celebrations"
-              subtitle={`${todayItems.length} today · ${upcoming.length} upcoming`}
-            />
-          </View>
-          <Dropdown
-            className="mb-1 w-36"
-            value={rangeLabel}
-            placeholder="This month"
-            options={RANGE_LABELS}
-            onSelect={(label) => {
-              const next = RANGE_OPTIONS.find((o) => o.label === label);
-              if (next) setRange(next.value);
-            }}
-          />
-        </View>
+      <BackButton
+        title="Celebrations"
+        subtitle="Birthdays, anniversaries, and new joiners across your team"
+      />
 
-        {/* Search */}
-        <View className="px-4 pt-2">
-          <View
-            style={cardShadow}
-            className="h-12 flex-row items-center gap-2.5 rounded-2xl border border-slate-200 bg-white px-3.5"
-          >
-            <Search size={17} color="#94A3B8" />
-            <TextInput
-              value={query}
-              onChangeText={setQuery}
-              placeholder="Search name, role, team…"
-              placeholderTextColor="#94A3B8"
-              className="flex-1 text-sm text-ink"
-              returnKeyType="search"
-            />
-            {query.length > 0 ? (
-              <Pressable
-                onPress={() => setQuery('')}
-                hitSlop={8}
-                accessibilityLabel="Clear search"
+      {/* Slideable type filter — kept outside the vertical ScrollView; the
+          nested horizontal-in-vertical ScrollView combination swallows taps
+          under the new architecture. */}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        className="mt-2 grow-0"
+        contentContainerClassName="gap-2 px-4"
+      >
+        {KIND_OPTIONS.map((opt) => {
+          const active = opt.value === kind;
+          return (
+            <Pressable
+              key={opt.value}
+              onPress={() => setKind(opt.value)}
+              className="h-8 items-center justify-center rounded-full border px-3.5"
+              style={{
+                backgroundColor: active ? BRAND_PRIMARY : '#FFFFFF',
+                borderColor: active ? BRAND_PRIMARY : brandAlpha(0.15),
+              }}
+            >
+              <Text
+                className="text-[13px] font-semibold"
+                style={{ color: active ? '#FFFFFF' : brandAlpha(0.65) }}
               >
-                <X size={16} color="#94A3B8" />
-              </Pressable>
-            ) : null}
-          </View>
-        </View>
-
-        {/* Type filter — scrollable chips keep all four labels readable. */}
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          className="mt-3 grow-0"
-          contentContainerClassName="gap-2 px-4"
-        >
-          {KIND_OPTIONS.map((option) => {
-            const active = option.value === kind;
-            return (
-              <Pressable
-                key={option.value}
-                onPress={() => setKind(option.value)}
-                style={active ? undefined : cardShadow}
-                className={`rounded-full border px-3.5 py-2 ${
-                  active
-                    ? 'border-[#14323F] bg-[#14323F]'
-                    : 'border-slate-200 bg-white active:scale-95'
-                }`}
-              >
-                <Text
-                  className={`text-[13px] font-semibold ${
-                    active ? 'text-white' : 'text-slate-500'
-                  }`}
-                >
-                  {option.label}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </ScrollView>
-      </View>
+                {opt.label}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </ScrollView>
 
       <ScrollView
         className="flex-1"
-        contentContainerClassName="px-4 pt-5 gap-5"
+        contentContainerClassName="px-4 pt-4 gap-5"
         contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
-        {/* Today's hero — only rendered when something is actually happening. */}
+
+        {/* Today — label on the canvas, no wrapper panel. The cards carry a
+            kind-coloured border instead, so they still stand out. */}
         {todayItems.length > 0 ? (
           <View>
-            <View className="mb-3 flex-row items-center gap-2">
-              <Sparkles size={14} color="#B8881F" />
-              <Text className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-                Today
-              </Text>
-              <Text className="text-[11px] font-semibold text-ink">
-                · {todayItems.length}{' '}
+            <View className="mb-3 flex-row flex-wrap items-center gap-2">
+              <View
+                className="flex-row items-center gap-1 rounded-full px-2 py-[2px]"
+                style={{ backgroundColor: 'rgba(212, 162, 74, 0.25)' }}
+              >
+                <Sparkles size={12} color="#A37526" />
+                <Text
+                  className="text-[10px] font-bold uppercase tracking-widest"
+                  style={{ color: '#A37526' }}
+                >
+                  Today
+                </Text>
+              </View>
+              <Text className="text-xs" style={{ color: brandAlpha(0.55) }}>
+                {todayItems.length}{' '}
                 {todayItems.length === 1 ? 'celebration' : 'celebrations'}
               </Text>
             </View>
@@ -217,47 +165,58 @@ export default function Celebrations() {
           </View>
         ) : null}
 
-        {/* Upcoming timeline, grouped by day */}
+        {/* Upcoming timeline — the section label sits on the canvas so the
+            celebration cards are the only surfaces, as on Announcements. */}
         <View>
-          <View className="mb-3 flex-row items-center justify-between">
-            <Text className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+          <View className="mb-3 flex-row items-baseline justify-between gap-2">
+            <Text
+              className="text-[15px] font-bold"
+              style={{ color: BRAND_PRIMARY }}
+            >
               Upcoming
             </Text>
-            <Text className="text-[11px] text-slate-400">
+            <Text className="text-xs" style={{ color: brandAlpha(0.55) }}>
               {upcoming.length}{' '}
               {upcoming.length === 1 ? 'celebration' : 'celebrations'}
             </Text>
           </View>
 
           {grouped.length === 0 ? (
-            <View
-              style={cardShadow}
-              className="items-center rounded-[24px] border border-slate-100 bg-white px-6 py-10"
+            <Text
+              className="py-6 text-center text-sm"
+              style={{ color: brandAlpha(0.55) }}
             >
-              <View className="h-14 w-14 items-center justify-center rounded-2xl bg-slate-100">
-                <PartyPopper size={24} color="#94A3B8" />
-              </View>
-              <Text className="mt-4 text-base font-bold text-ink">
-                Nothing on the calendar
-              </Text>
-              <Text className="mt-1 text-center text-xs text-slate-400">
-                No celebrations match this range or filter.
-              </Text>
-            </View>
+              Nothing on the calendar for the next 7 days.
+            </Text>
           ) : (
-            <View className="gap-5">
+            <View className="gap-4">
               {grouped.map((group) => (
                 <View key={group.key}>
-                  <View className="mb-2.5 flex-row items-center gap-2">
-                    <View className="h-1.5 w-1.5 rounded-full bg-[#F5D14E]" />
-                    <Text className="text-[13px] font-bold text-ink">
+                  <View className="flex-row items-center gap-1.5">
+                    {/* Timeline dot with its soft halo ring */}
+                    <View
+                      className="h-3.5 w-3.5 items-center justify-center rounded-full"
+                      style={{ backgroundColor: 'rgba(91, 90, 184, 0.12)' }}
+                    >
+                      <View
+                        className="h-2 w-2 rounded-full"
+                        style={{ backgroundColor: BRAND_SECONDARY }}
+                      />
+                    </View>
+                    <Text
+                      className="text-[13px] font-bold"
+                      style={{ color: BRAND_PRIMARY }}
+                    >
                       {formatDayLabel(group.iso)}
                     </Text>
-                    <Text className="text-[11px] text-slate-400">
+                    <Text
+                      className="text-xs font-semibold"
+                      style={{ color: brandAlpha(0.55) }}
+                    >
                       · {formatFullDate(group.iso)}
                     </Text>
                   </View>
-                  <View className="gap-3">
+                  <View className="mt-2 gap-3">
                     {group.items.map((c) => (
                       <CelebrationCard
                         key={c.id}
