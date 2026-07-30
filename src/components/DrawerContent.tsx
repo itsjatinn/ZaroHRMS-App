@@ -21,9 +21,19 @@ type MenuItem = {
 
 const MENU: MenuItem[] = [
   {
+    label: 'Calendar',
+    route: '/events',
+    icon: (c) => <Feather name="calendar" size={20} color={c} />,
+  },
+  {
     label: 'Holidays',
     route: '/holidays',
-    icon: (c) => <Feather name="calendar" size={20} color={c} />,
+    icon: (c) => <Feather name="sun" size={20} color={c} />,
+  },
+  {
+    label: 'Celebrations',
+    route: '/celebrations',
+    icon: (c) => <Ionicons name="gift-outline" size={20} color={c} />,
   },
   {
     label: 'Announcements',

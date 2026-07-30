@@ -1,0 +1,338 @@
+import { Feather } from '@expo/vector-icons';
+import { Redirect } from 'expo-router';
+import { useMemo, useState } from 'react';
+import { Alert, LayoutAnimation, Platform, Pressable, ScrollView, Text, TextInput, UIManager, View } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+
+import { useAuth } from '../../../src/auth/AuthContext';
+import BackButton from '../../../src/components/BackButton';
+import DelegateApprovalsModal from '../../../src/components/approvals/DelegateApprovalsModal';
+import {
+  INITIAL_APPROVALS,
+  INITIAL_DELEGATIONS,
+  STATUS_FILTERS,
+  STATUS_STYLE,
+  TYPE_FILTERS,
+  TYPE_STYLE,
+  type Approval,
+  type ApprovalStatus,
+  type Delegation,
+} from '../../../src/components/approvals/approvalsData';
+import { cardShadow } from '../../../src/components/shadow';
+
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
+
+function DetailCell({ label, value }: { label: string; value: string }) {
+  return (
+    <View className="flex-1">
+      <Text className="text-[8px] font-semibold uppercase tracking-wider text-slate-400">{label}</Text>
+      <Text className="mt-0.5 text-xs font-bold text-ink">{value}</Text>
+    </View>
+  );
+}
+
+function ApprovalCard({
+  request,
+  expanded,
+  onToggle,
+  onDecision,
+}: {
+  request: Approval;
+  expanded: boolean;
+  onToggle: () => void;
+  onDecision: (id: string, status: ApprovalStatus) => void;
+}) {
+  const typeStyle = TYPE_STYLE[request.type];
+  const statusStyle = STATUS_STYLE[request.status];
+
+  const decide = (status: ApprovalStatus) => {
+    Alert.alert(
+      `${status === 'Approved' ? 'Approve' : 'Reject'} request?`,
+      `${request.employee}'s ${request.title.toLowerCase()} request will be ${status.toLowerCase()}.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: status === 'Approved' ? 'Approve' : 'Reject',
+          style: status === 'Rejected' ? 'destructive' : 'default',
+          onPress: () => onDecision(request.id, status),
+        },
+      ],
+    );
+  };
+
+  return (
+    <View className="overflow-hidden rounded-2xl border border-slate-200 bg-white" style={cardShadow}>
+      {/* Collapsed summary — enough to triage without opening the card. */}
+      <Pressable onPress={onToggle} className="p-4 active:opacity-90">
+        <View className="flex-row items-start">
+          <View className="mr-3 h-10 w-10 items-center justify-center rounded-full bg-slate-100">
+            <Text className="text-xs font-bold text-slate-500">{request.initials}</Text>
+          </View>
+          <View className="min-w-0 flex-1">
+            <View className="flex-row items-center">
+              <Text className="text-sm font-bold text-ink" numberOfLines={1}>{request.employee}</Text>
+              <Text className="ml-2 flex-1 text-[11px] text-slate-400" numberOfLines={1}>{request.role}</Text>
+            </View>
+            <View className="mt-1.5 flex-row flex-wrap items-center gap-1.5">
+              <View className="flex-row items-center rounded-md px-2 py-0.5" style={{ backgroundColor: typeStyle.background }}>
+                <Feather name={typeStyle.icon as keyof typeof Feather.glyphMap} size={9} color={typeStyle.color} />
+                <Text className="ml-1 text-[9px] font-bold" style={{ color: typeStyle.color }}>{request.type}</Text>
+              </View>
+              <Text className="rounded-md bg-slate-100 px-2 py-0.5 text-[9px] font-semibold text-slate-500">{request.stage}</Text>
+            </View>
+            <Text className="mt-1.5 text-[11px] text-slate-500" numberOfLines={1}>
+              {request.title} · {request.days} day{request.days === 1 ? '' : 's'} · {request.from} to {request.to}
+            </Text>
+          </View>
+          <View className="ml-2 items-end">
+            <Text className="rounded-full px-2.5 py-1 text-[10px] font-bold" style={{ backgroundColor: statusStyle.bg, color: statusStyle.text }}>
+              {request.status}
+            </Text>
+            <View className="mt-1.5 flex-row items-center">
+              <Feather name="clock" size={9} color="#94A3B8" />
+              <Text className="ml-1 text-[9px] text-slate-400">{request.submitted}</Text>
+            </View>
+            <Feather name={expanded ? 'chevron-up' : 'chevron-down'} size={16} color="#94A3B8" style={{ marginTop: 6 }} />
+          </View>
+        </View>
+      </Pressable>
+
+      {expanded ? (
+        <View className="px-4 pb-4">
+          <Text className="text-xs leading-5 text-slate-500">{request.reason}</Text>
+
+          <View className="mt-3 flex-row rounded-xl bg-slate-50 p-3">
+            <DetailCell label="Type" value={request.title} />
+            <DetailCell label="Days" value={`${request.days}`} />
+            <DetailCell label="From" value={request.from} />
+            <DetailCell label="To" value={request.to} />
+          </View>
+
+          <View className="mt-3 rounded-xl bg-[#EFEEFC] p-3">
+            <Text className="text-[11px] font-bold text-[#645CB5]">{request.stage}</Text>
+            <Text className="mt-0.5 text-[11px] text-slate-500">{request.stageNote}</Text>
+          </View>
+
+          {/* Coverage check: who else on the team is out in the same window. */}
+          {request.overlaps.length ? (
+            <View className="mt-3 rounded-xl border border-[#F0DFAE] bg-[#FFFBF0] p-3">
+              <View className="flex-row items-center">
+                <Feather name="users" size={13} color="#A16D13" />
+                <Text className="ml-1.5 flex-1 text-[11px] font-bold text-[#A16D13]">Team also on leave</Text>
+                <Text className="rounded-full bg-[#FFF3D6] px-2 py-0.5 text-[9px] font-bold text-[#A16D13]">
+                  {request.overlaps.length} overlapping
+                </Text>
+              </View>
+              <View className="mt-2 gap-2">
+                {request.overlaps.map((overlap) => (
+                  <View key={`${overlap.name}-${overlap.period}`} className="flex-row items-center">
+                    <View className="flex-1">
+                      <Text className="text-[11px] font-bold text-ink">{overlap.name}</Text>
+                      <Text className="text-[9px] text-slate-400">{overlap.role}</Text>
+                    </View>
+                    <Text className="mr-2 text-[10px] text-slate-500" numberOfLines={1}>
+                      {overlap.period} · {overlap.leaveType}
+                    </Text>
+                    <Text
+                      className="rounded-full px-2 py-0.5 text-[9px] font-bold"
+                      style={
+                        overlap.state === 'Approved'
+                          ? { backgroundColor: '#E8F5EF', color: '#2F7D5B' }
+                          : { backgroundColor: '#FFF4D9', color: '#9B6A12' }
+                      }
+                    >
+                      {overlap.state}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            </View>
+          ) : null}
+
+          {request.status === 'Pending' ? (
+            <View className="mt-4 flex-row gap-3">
+              <Pressable onPress={() => decide('Rejected')} className="flex-1 flex-row items-center justify-center rounded-xl border border-rose-200 bg-white py-2.5 active:opacity-70">
+                <Feather name="x" size={14} color="#F43F5E" />
+                <Text className="ml-1.5 text-sm font-bold text-rose-500">Reject</Text>
+              </Pressable>
+              <Pressable onPress={() => decide('Approved')} className="flex-1 flex-row items-center justify-center rounded-xl bg-[#2F7D5B] py-2.5 active:opacity-80">
+                <Feather name="check" size={14} color="#FFFFFF" />
+                <Text className="ml-1.5 text-sm font-bold text-white">Approve</Text>
+              </Pressable>
+            </View>
+          ) : null}
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+export default function ApprovalsScreen() {
+  const { userRole } = useAuth();
+  const insets = useSafeAreaInsets();
+  const [requests, setRequests] = useState(INITIAL_APPROVALS);
+  const [delegations, setDelegations] = useState(INITIAL_DELEGATIONS);
+  const [type, setType] = useState<(typeof TYPE_FILTERS)[number]>('All types');
+  const [status, setStatus] = useState<(typeof STATUS_FILTERS)[number]>('Pending');
+  const [query, setQuery] = useState('');
+  const [expandedId, setExpandedId] = useState<string | null>(INITIAL_APPROVALS[0]?.id ?? null);
+  const [delegateOpen, setDelegateOpen] = useState(false);
+
+  const pendingCount = useMemo(
+    () => requests.filter((item) => item.status === 'Pending').length,
+    [requests],
+  );
+
+  const visible = useMemo(() => {
+    const search = query.trim().toLowerCase();
+    return requests.filter((item) => {
+      const matchesSearch =
+        !search ||
+        `${item.employee} ${item.title} ${item.type} ${item.reason}`.toLowerCase().includes(search);
+      return (
+        matchesSearch &&
+        (type === 'All types' || item.type === type) &&
+        (status === 'All' || item.status === status)
+      );
+    });
+  }, [requests, type, status, query]);
+
+  if (userRole !== 'manager') return <Redirect href="/" />;
+
+  const toggle = (id: string) => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setExpandedId((current) => (current === id ? null : id));
+  };
+
+  const updateDecision = (id: string, nextStatus: ApprovalStatus) => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setRequests((current) =>
+      current.map((item) => (item.id === id ? { ...item, status: nextStatus } : item)),
+    );
+  };
+
+  const addDelegation = (delegation: Omit<Delegation, 'id' | 'state'>) => {
+    setDelegations((current) => [
+      { ...delegation, id: `DEL-${current.length + 3}`, state: 'Scheduled' },
+      ...current,
+    ]);
+    setDelegateOpen(false);
+    Alert.alert('Delegation added', `${delegation.delegate} will action your queue from ${delegation.start} to ${delegation.end}.`);
+  };
+
+  const revokeDelegation = (id: string) => {
+    setDelegations((current) =>
+      current.map((item) => (item.id === id ? { ...item, state: 'Revoked' } : item)),
+    );
+  };
+
+  return (
+    <SafeAreaView edges={['top', 'left', 'right']} className="flex-1 bg-canvas">
+      <BackButton
+        title="Approvals"
+        subtitle="Leave, regularization, comp-off and optional-holiday requests waiting on you"
+        subtitleNumberOfLines={2}
+      />
+
+      <ScrollView
+        className="flex-1"
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: insets.bottom + 112 }}
+      >
+        <View className="gap-3 px-4 pt-3">
+          <View className="flex-row items-center rounded-xl border border-slate-200 bg-white px-3">
+            <Feather name="search" size={18} color="#94A3B8" />
+            <TextInput
+              value={query}
+              onChangeText={setQuery}
+              placeholder="Search name, summary…"
+              placeholderTextColor="#94A3B8"
+              className="ml-2 h-12 flex-1 text-sm text-ink"
+            />
+            {query ? (
+              <Pressable onPress={() => setQuery('')} hitSlop={8}>
+                <Feather name="x" size={16} color="#94A3B8" />
+              </Pressable>
+            ) : null}
+          </View>
+
+          <Pressable
+            onPress={() => setDelegateOpen(true)}
+            className="flex-row items-center justify-center rounded-xl bg-ink py-3 active:opacity-80"
+          >
+            <Feather name="user-check" size={15} color="#FFFFFF" />
+            <Text className="ml-2 text-sm font-bold text-white">Delegate approvals</Text>
+          </Pressable>
+
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
+            {TYPE_FILTERS.map((item) => (
+              <Pressable
+                key={item}
+                onPress={() => setType(item)}
+                className={`rounded-full border px-4 py-2 ${type === item ? 'border-ink bg-ink' : 'border-slate-200 bg-white'}`}
+              >
+                <Text className={`text-xs font-semibold ${type === item ? 'text-white' : 'text-slate-500'}`}>{item}</Text>
+              </Pressable>
+            ))}
+          </ScrollView>
+
+          <View className="flex-row rounded-xl bg-slate-200/70 p-1">
+            {STATUS_FILTERS.map((item) => (
+              <Pressable
+                key={item}
+                onPress={() => setStatus(item)}
+                className={`flex-1 items-center rounded-lg py-2.5 ${status === item ? 'bg-white' : ''}`}
+                style={status === item ? cardShadow : undefined}
+              >
+                <Text className={`text-[11px] font-semibold ${status === item ? 'text-ink' : 'text-slate-500'}`}>{item}</Text>
+              </Pressable>
+            ))}
+          </View>
+
+          <View className="mt-1 flex-row items-center justify-between">
+            <Text className="text-lg font-bold text-ink">
+              {status === 'Pending' ? 'Pending approvals' : status === 'All' ? 'All requests' : `${status} requests`}
+            </Text>
+            <Text className="text-xs text-slate-400">
+              {visible.length} request{visible.length === 1 ? '' : 's'}
+            </Text>
+          </View>
+
+          <View className="gap-3">
+            {visible.map((request) => (
+              <ApprovalCard
+                key={request.id}
+                request={request}
+                expanded={expandedId === request.id}
+                onToggle={() => toggle(request.id)}
+                onDecision={updateDecision}
+              />
+            ))}
+            {visible.length === 0 ? (
+              <View className="items-center rounded-2xl border border-slate-200 bg-white px-8 py-12">
+                <View className="h-14 w-14 items-center justify-center rounded-full bg-slate-100">
+                  <Feather name="check-circle" size={25} color="#94A3B8" />
+                </View>
+                <Text className="mt-3 text-base font-bold text-ink">You’re all caught up</Text>
+                <Text className="mt-1 text-center text-sm text-slate-400">
+                  {pendingCount ? 'Nothing matches these filters.' : 'There is nothing waiting on you.'}
+                </Text>
+              </View>
+            ) : null}
+          </View>
+        </View>
+      </ScrollView>
+
+      <DelegateApprovalsModal
+        visible={delegateOpen}
+        delegations={delegations}
+        onClose={() => setDelegateOpen(false)}
+        onDelegate={addDelegation}
+        onRevoke={revokeDelegation}
+      />
+    </SafeAreaView>
+  );
+}

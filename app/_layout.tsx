@@ -16,6 +16,9 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { enableFreeze } from 'react-native-screens';
 
+import { QueryClientProvider } from '@tanstack/react-query';
+
+import { queryClient } from '../src/api/queryClient';
 import { AuthProvider, useAuth } from '../src/auth/AuthContext';
 import AnimatedSplash from '../src/components/AnimatedSplash';
 
@@ -133,10 +136,12 @@ export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
-        <AuthProvider>
-          <RootNavigator fontsLoaded={fontsLoaded} />
-          <StatusBar style="dark" />
-        </AuthProvider>
+        <QueryClientProvider client={queryClient}>
+          <AuthProvider>
+            <RootNavigator fontsLoaded={fontsLoaded} />
+            <StatusBar style="dark" />
+          </AuthProvider>
+        </QueryClientProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

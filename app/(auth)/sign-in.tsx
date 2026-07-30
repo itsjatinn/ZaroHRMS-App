@@ -3,8 +3,10 @@ import { Check, Eye, EyeOff, Pencil } from 'lucide-react-native';
 import { useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 
+import { login, toAppRole } from '../../src/api/auth';
+import { ApiError, NetworkError } from '../../src/api/client';
 import { useAuth } from '../../src/auth/AuthContext';
-import { isDemoLogin } from '../../src/auth/demoCredentials';
+import { authenticateDemoLogin } from '../../src/auth/demoCredentials';
 import AuthButton from '../../src/components/auth/AuthButton';
 import AuthField from '../../src/components/auth/AuthField';
 import AuthShell from '../../src/components/auth/AuthShell';
@@ -61,20 +63,49 @@ export default function SignInScreen() {
     }
     setErrors({});
 
-    // TODO: replace this demo check with a real API call and pass the token.
-    // Setting the session flips the root guard and reveals the app.
+    // Signs in against the HRMS backend. Setting the session flips the root
+    // guard and reveals the app.
     setLoading(true);
     try {
-      if (!isDemoLogin(organization, email, password)) {
-        setFormError('Incorrect email or password.');
-        return;
-      }
+      const result = await login({
+        tenantSlug: organization,
+        email,
+        password,
+      });
       // Remember me controls whether we persist the email for next launch; the
       // org slug is always kept so the workspace resolves.
-      await signIn(undefined, {
+      await signIn(result.accessToken, {
         orgSlug: organization,
         email: rememberMe ? email : null,
+        role: toAppRole(result.role),
+        user: result.user,
+        tenant: result.tenant,
       });
+    } catch (error) {
+      if (error instanceof ApiError) {
+        setFormError(
+          error.status === 401
+            ? error.message || 'Incorrect email or password.'
+            : error.message,
+        );
+        return;
+      }
+      // Backend unreachable (no dev server / wrong host): the demo credentials
+      // still open the app with mock data so the build stays demoable.
+      const demoRole = authenticateDemoLogin(organization, email, password);
+      if (error instanceof NetworkError && demoRole) {
+        await signIn(undefined, {
+          orgSlug: organization,
+          email: rememberMe ? email : null,
+          role: demoRole,
+        });
+        return;
+      }
+      setFormError(
+        error instanceof NetworkError
+          ? 'Cannot reach the server. Check your connection and try again.'
+          : 'Something went wrong. Please try again.',
+      );
     } finally {
       setLoading(false);
     }

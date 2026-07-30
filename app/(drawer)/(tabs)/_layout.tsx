@@ -10,10 +10,12 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { useAuth } from '../../../src/auth/AuthContext';
+
 const ACTIVE = '#F5D14E';
 const INACTIVE = '#FFFFFF';
 const BAR_HEIGHT = 78;
-const TAB_SLOT_WIDTH = 84;
+const MAX_TAB_SLOT_WIDTH = 84;
 
 // Per-route icon renderers, keyed by route name.
 const ICONS: Record<string, (color: string) => ReactNode> = {
@@ -22,6 +24,8 @@ const ICONS: Record<string, (color: string) => ReactNode> = {
     <MaterialCommunityIcons name="calendar-check" size={22} color={color} />
   ),
   leave: (color) => <Feather name="calendar" size={22} color={color} />,
+  approvals: (color) => <Feather name="check-circle" size={22} color={color} />,
+  'my-team': (color) => <Feather name="users" size={22} color={color} />,
 };
 
 // Shrinks + rounds the screen as the drawer opens (0 = closed, 1 = open),
@@ -64,7 +68,12 @@ function AnimatedScene({ children }: { children: ReactNode }) {
 function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
-  const barWidth = Math.min(width - 56, state.routes.length * TAB_SLOT_WIDTH + 28);
+  const horizontalMargin = state.routes.length > 3 ? 12 : 28;
+  const barWidth = Math.min(
+    width - horizontalMargin * 2,
+    state.routes.length * MAX_TAB_SLOT_WIDTH + 28,
+  );
+  const tabSlotWidth = (barWidth - 16) / state.routes.length;
 
   return (
     <View
@@ -110,7 +119,7 @@ function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
             accessibilityRole="button"
             accessibilityState={focused ? { selected: true } : {}}
             style={{
-              width: TAB_SLOT_WIDTH,
+              width: tabSlotWidth,
               height: '100%',
               alignItems: 'center',
               justifyContent: 'center',
@@ -137,7 +146,7 @@ function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
               numberOfLines={1}
               style={{
                 marginTop: 1,
-                fontSize: 12,
+                fontSize: state.routes.length > 3 ? 10 : 12,
                 fontWeight: '600',
                 color,
               }}
@@ -152,6 +161,8 @@ function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
 }
 
 export default function TabsLayout() {
+  const { userRole } = useAuth();
+  const isManager = userRole === 'manager';
   return (
     <AnimatedScene>
       <Tabs
@@ -162,8 +173,18 @@ export default function TabsLayout() {
         }}
       >
         <Tabs.Screen name="index" options={{ title: 'Home' }} />
+        {/* Manager-only. `Protected` drops the route from navigator state
+            entirely — `href: null` only sets tabBarItemStyle/tabBarButton, which
+            our custom FloatingTabBar (it maps over state.routes) never reads, so
+            the tabs stayed visible for employees. */}
+        <Tabs.Protected guard={isManager}>
+          <Tabs.Screen name="approvals" options={{ title: 'Approvals' }} />
+        </Tabs.Protected>
         <Tabs.Screen name="attendance" options={{ title: 'Attendance' }} />
         <Tabs.Screen name="leave" options={{ title: 'Leave' }} />
+        <Tabs.Protected guard={isManager}>
+          <Tabs.Screen name="my-team" options={{ title: 'My Team' }} />
+        </Tabs.Protected>
       </Tabs>
     </AnimatedScene>
   );
