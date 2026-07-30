@@ -1,6 +1,6 @@
 import DateTimePicker, {
   type DateTimePickerEvent,
-} from '@react-native-community/datetimepicker';
+} from '../../src/components/CrossDatePicker';
 import * as DocumentPicker from 'expo-document-picker';
 import { useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { CalendarDays, Clock3 } from 'lucide-react-native';

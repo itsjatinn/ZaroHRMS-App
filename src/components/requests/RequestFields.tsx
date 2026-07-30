@@ -1,6 +1,6 @@
 import DateTimePicker, {
   type DateTimePickerEvent,
-} from '@react-native-community/datetimepicker';
+} from '../CrossDatePicker';
 import { CalendarDays, Clock3 } from 'lucide-react-native';
 import { useState, type ReactNode } from 'react';
 import { Pressable, Text, View } from 'react-native';

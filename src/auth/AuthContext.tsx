@@ -1,4 +1,4 @@
-import * as SecureStore from 'expo-secure-store';
+import { getItem, removeItem, setItem } from './secureStorage';
 import {
   createContext,
   useCallback,
@@ -89,11 +89,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       try {
         const [savedSession, savedSlug, savedEmail, savedRole, savedProfile] =
           await Promise.all([
-            SecureStore.getItemAsync(SESSION_KEY),
-            SecureStore.getItemAsync(ORG_SLUG_KEY),
-            SecureStore.getItemAsync(EMAIL_KEY),
-            SecureStore.getItemAsync(ROLE_KEY),
-            SecureStore.getItemAsync(PROFILE_KEY),
+            getItem(SESSION_KEY),
+            getItem(ORG_SLUG_KEY),
+            getItem(EMAIL_KEY),
+            getItem(ROLE_KEY),
+            getItem(PROFILE_KEY),
           ]);
         // Hand the API client its bearer token before any screen renders.
         await restoreAccessToken();
@@ -132,19 +132,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // session deliberately leaves the client without one.
       await setAccessToken(token === DEMO_SESSION_TOKEN ? null : token);
       try {
-        await SecureStore.setItemAsync(SESSION_KEY, token);
-        await SecureStore.setItemAsync(ROLE_KEY, role);
-        await SecureStore.setItemAsync(
-          PROFILE_KEY,
-          JSON.stringify(nextProfile),
-        );
+        await setItem(SESSION_KEY, token);
+        await setItem(ROLE_KEY, role);
+        await setItem(PROFILE_KEY, JSON.stringify(nextProfile));
         // Remember the org so the workspace resolves next time.
-        if (slug) await SecureStore.setItemAsync(ORG_SLUG_KEY, slug);
+        if (slug) await setItem(ORG_SLUG_KEY, slug);
         // Remember or forget the email based on the "Remember me" choice.
         if (options?.email === null) {
-          await SecureStore.deleteItemAsync(EMAIL_KEY);
+          await removeItem(EMAIL_KEY);
         } else if (email) {
-          await SecureStore.setItemAsync(EMAIL_KEY, email);
+          await setItem(EMAIL_KEY, email);
         }
       } catch {
         // Ignore persistence failures; keep the in-memory session.
@@ -171,9 +168,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await setAccessToken(null);
     try {
       await Promise.all([
-        SecureStore.deleteItemAsync(SESSION_KEY),
-        SecureStore.deleteItemAsync(ROLE_KEY),
-        SecureStore.deleteItemAsync(PROFILE_KEY),
+        removeItem(SESSION_KEY),
+        removeItem(ROLE_KEY),
+        removeItem(PROFILE_KEY),
       ]);
     } catch {
       // Ignore; clear in-memory session regardless.

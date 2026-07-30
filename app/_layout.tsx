@@ -11,7 +11,7 @@ import {
 import { SplashScreen, Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
-import { Text, TextInput } from 'react-native';
+import { Platform, Text, TextInput } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { enableFreeze } from 'react-native-screens';
@@ -37,7 +37,9 @@ const sentryDsn = process.env.EXPO_PUBLIC_SENTRY_DSN;
 if (sentryDsn) {
   Sentry.init({
     dsn: sentryDsn,
-    enableNative: true,
+    // Native crash reporting only exists on iOS/Android; on web it must be off
+    // or init throws. JS error reporting still works on all platforms.
+    enableNative: Platform.OS !== 'web',
   });
 }
 
