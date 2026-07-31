@@ -18,6 +18,8 @@ type HolidayDetailsSheetProps = {
   /** Optional-holiday days still left in the employee's quota. */
   remaining: number;
   onClaim: (holiday: CalendarHoliday) => void;
+  /** Withdraw a pending claim, or cancel an approved one (confirmed upstream). */
+  onCancelClaim: (holiday: CalendarHoliday) => void;
   onClose: () => void;
 };
 
@@ -27,6 +29,7 @@ export default function HolidayDetailsSheet({
   holiday,
   remaining,
   onClaim,
+  onCancelClaim,
   onClose,
 }: HolidayDetailsSheetProps) {
   if (!holiday) return null;
@@ -35,6 +38,11 @@ export default function HolidayDetailsSheet({
   const claim = holiday.claim ? CLAIM_META[holiday.claim] : null;
   const past = isPast(holiday.date);
   const canClaim = holiday.claim === 'open' && !past && remaining > 0;
+  // A live claim can be taken back until the day itself passes — pending ones
+  // withdraw quietly, approved ones get a confirmation upstream because the
+  // day comes back onto the attendance calendar.
+  const canCancelClaim =
+    (holiday.claim === 'pending' || holiday.claim === 'approved') && !past;
 
   return (
     <Modal visible transparent animationType="fade" onRequestClose={onClose}>
@@ -129,6 +137,20 @@ export default function HolidayDetailsSheet({
             >
               <Text className="text-sm font-semibold text-white">
                 Claim this optional holiday
+              </Text>
+            </Pressable>
+          ) : null}
+
+          {canCancelClaim ? (
+            <Pressable
+              onPress={() => onCancelClaim(holiday)}
+              accessibilityRole="button"
+              className="mt-5 h-12 items-center justify-center rounded-2xl border border-[#B04A2A]/30 bg-white active:scale-95"
+            >
+              <Text className="text-sm font-semibold text-[#B04A2A]">
+                {holiday.claim === 'approved'
+                  ? 'Cancel holiday claim'
+                  : 'Withdraw claim'}
               </Text>
             </Pressable>
           ) : null}

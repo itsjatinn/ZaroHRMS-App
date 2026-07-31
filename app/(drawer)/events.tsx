@@ -1,5 +1,6 @@
 import { CalendarDays, Search, X } from 'lucide-react-native';
 import { useMemo, useState } from 'react';
+import { Alert } from '../../src/components/CrossAlert';
 import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import {
   SafeAreaView,
@@ -7,6 +8,14 @@ import {
 } from 'react-native-safe-area-context';
 
 import BackButton from '../../src/components/BackButton';
+import {
+  toCalendarHolidays,
+  useHolidayCalendar,
+  useOptionalHolidayClaim,
+  useOptionalHolidayContext,
+} from '../../src/api/holidays';
+import { useAuth } from '../../src/auth/AuthContext';
+import CancelClaimDialog from '../../src/components/holidays/CancelClaimDialog';
 import HolidayDetailsSheet from '../../src/components/holidays/HolidayDetailsSheet';
 import HolidayGridCard from '../../src/components/holidays/HolidayGridCard';
 import {
@@ -36,10 +45,32 @@ export default function Events() {
   const insets = useSafeAreaInsets();
   const today = useMemo(startOfToday, []);
 
-  const [holidays, setHolidays] = useState<CalendarHoliday[]>(HOLIDAYS);
+  const { isBackendSession } = useAuth();
+  const calendarYear = isBackendSession ? new Date().getFullYear() : HOLIDAY_YEAR;
+
+  // Live calendar + this employee's optional-holiday claims, merged the same
+  // way the web page does (claims matched on date + name). The offline demo
+  // session keeps the sample list and claims locally.
+  const calendarQuery = useHolidayCalendar(calendarYear, isBackendSession);
+  const claimContextQuery = useOptionalHolidayContext(isBackendSession);
+  const claimMutation = useOptionalHolidayClaim();
+
+  const [demoHolidays, setDemoHolidays] = useState<CalendarHoliday[]>(HOLIDAYS);
+  const holidays = useMemo(
+    () =>
+      isBackendSession
+        ? toCalendarHolidays(
+            calendarQuery.data?.holidays ?? [],
+            claimContextQuery.data ?? null,
+          )
+        : demoHolidays,
+    [isBackendSession, calendarQuery.data, claimContextQuery.data, demoHolidays],
+  );
   const [type, setType] = useState<TypeFilter>('all');
   const [query, setQuery] = useState('');
   const [selected, setSelected] = useState<CalendarHoliday | null>(null);
+  /** Approved claim awaiting cancel confirmation. */
+  const [cancelTarget, setCancelTarget] = useState<CalendarHoliday | null>(null);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -68,14 +99,77 @@ export default function Events() {
       ).length,
     [holidays],
   );
-  const remaining = Math.max(0, OPTIONAL_QUOTA - claimed);
+  // The server's quota context is authoritative on a live session; the demo
+  // derives the same number from its local claims.
+  const remaining = isBackendSession
+    ? Math.max(0, claimContextQuery.data?.remaining ?? 0)
+    : Math.max(0, OPTIONAL_QUOTA - claimed);
 
-  // Mock claim — the real flow will post to /api/holidays/optional-claim.
+  // Claims post to the same endpoint the web uses; auto-approve orgs come back
+  // approved on the refetch, others as pending. Demo claims stay local.
   const claim = (holiday: CalendarHoliday) => {
-    setHolidays((prev) =>
-      prev.map((h) => (h.id === holiday.id ? { ...h, claim: 'pending' } : h)),
-    );
     setSelected(null);
+    if (!isBackendSession) {
+      setDemoHolidays((prev) =>
+        prev.map((h) => (h.id === holiday.id ? { ...h, claim: 'pending' } : h)),
+      );
+      return;
+    }
+    claimMutation.mutate(
+      { holidayId: holiday.id, claimId: null },
+      {
+        onError: (error) => {
+          Alert.alert(
+            'Could not claim this holiday',
+            error instanceof Error && error.message
+              ? error.message
+              : 'Please try again in a moment.',
+          );
+        },
+      },
+    );
+  };
+
+  /** Shared by both paths — posts the cancel, or unwinds the demo claim. */
+  const performCancel = (holiday: CalendarHoliday) => {
+    if (!isBackendSession) {
+      setDemoHolidays((prev) =>
+        prev.map((h) => (h.id === holiday.id ? { ...h, claim: 'open' } : h)),
+      );
+      return;
+    }
+    if (!holiday.claimId) {
+      Alert.alert(
+        'Could not cancel',
+        'This claim has not synced yet. Pull to refresh and try again.',
+      );
+      return;
+    }
+    claimMutation.mutate(
+      { holidayId: holiday.id, claimId: holiday.claimId },
+      {
+        onError: (error) => {
+          Alert.alert(
+            'Could not cancel this claim',
+            error instanceof Error && error.message
+              ? error.message
+              : 'Please try again in a moment.',
+          );
+        },
+      },
+    );
+  };
+
+  // From the details sheet. A pending claim withdraws quietly; cancelling an
+  // approved one takes a day off the attendance calendar, so it confirms
+  // first — same order of ceremony as the web.
+  const requestCancelClaim = (holiday: CalendarHoliday) => {
+    setSelected(null);
+    if (holiday.claim === 'approved') {
+      setCancelTarget(holiday);
+      return;
+    }
+    performCancel(holiday);
   };
 
   return (
@@ -161,7 +255,7 @@ export default function Events() {
           <View>
             <View className="mb-3 flex-row items-center justify-between">
               <Text className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-                {HOLIDAY_YEAR} calendar · {filtered.length}{' '}
+                {calendarYear} calendar · {filtered.length}{' '}
                 {filtered.length === 1 ? 'day' : 'days'}
               </Text>
               <Text className="text-[11px] text-slate-400">
@@ -189,10 +283,20 @@ export default function Events() {
 
       </ScrollView>
 
+      <CancelClaimDialog
+        holiday={cancelTarget}
+        onKeep={() => setCancelTarget(null)}
+        onConfirm={(holiday) => {
+          setCancelTarget(null);
+          performCancel(holiday);
+        }}
+      />
+
       <HolidayDetailsSheet
         holiday={selected}
         remaining={remaining}
         onClaim={claim}
+        onCancelClaim={requestCancelClaim}
         onClose={() => setSelected(null)}
       />
     </SafeAreaView>

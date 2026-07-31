@@ -24,6 +24,13 @@ export type Celebration = {
   /** For new joiners — days since they joined. */
   daysSinceJoin?: number;
   avatarBg?: string;
+  profilePhoto?: string | null;
+  /** Calendar year of this occurrence — part of the wish identity. */
+  year?: number;
+  /** True when the signed-in user has already wished this occasion. */
+  wished?: boolean;
+  /** True when this user's wish also emails (reporting managers only). */
+  canEmail?: boolean;
 };
 
 export type KindFilter = 'all' | CelebrationKind;

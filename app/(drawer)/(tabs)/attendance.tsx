@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ScrollView, View } from 'react-native';
 import {
   SafeAreaView,
@@ -10,18 +10,46 @@ import AttendanceCalendarCard from '../../../src/components/AttendanceCalendarCa
 import AttendanceStatGrid from '../../../src/components/attendance/AttendanceStatGrid';
 import MonthFilter from '../../../src/components/attendance/MonthFilter';
 import {
+  fromDayStatuses,
   getMonthData,
   toPercent,
   toStats,
 } from '../../../src/components/attendance/monthData';
+import { useAuth } from '../../../src/auth/AuthContext';
 
 export default function Attendance() {
   const insets = useSafeAreaInsets();
+  const { isBackendSession } = useAuth();
+  const now = new Date();
 
-  // Single source of truth: the month drives every card on the page.
-  const [{ year, month }, setMonth] = useState({ year: 2026, month: 5 });
+  // Single source of truth: the month drives every card on the page. A live
+  // session opens on the real month; the demo keeps June 2026, the month its
+  // sample data describes.
+  const [{ year, month }, setMonth] = useState(
+    isBackendSession
+      ? { year: now.getFullYear(), month: now.getMonth() }
+      : { year: 2026, month: 5 },
+  );
+  // Same reason as the calendar card: the initialiser runs before the session
+  // has restored, so the month would otherwise stay pinned to the demo month.
+  const monthSyncedRef = useRef(false);
+  useEffect(() => {
+    if (!isBackendSession || monthSyncedRef.current) return;
+    monthSyncedRef.current = true;
+    const today = new Date();
+    setMonth({ year: today.getFullYear(), month: today.getMonth() });
+  }, [isBackendSession]);
 
-  const data = getMonthData(year, month);
+  // The calendar resolves the month (attendance + leave + holidays + optional
+  // claims) and hands the result up, so the summary counts exactly the days
+  // the grid draws instead of a second, divergent source.
+  const [dayStatuses, setDayStatuses] = useState<Record<number, string>>({});
+
+  const data = useMemo(
+    () =>
+      isBackendSession ? fromDayStatuses(dayStatuses) : getMonthData(year, month),
+    [isBackendSession, dayStatuses, year, month],
+  );
   const stats = toStats(data);
   const percent = toPercent(data);
 
@@ -55,7 +83,12 @@ export default function Attendance() {
         <AttendanceStatGrid stats={stats} percent={percent} />
 
         {/* Monthly attendance calendar */}
-        <AttendanceCalendarCard year={year} month={month} />
+        <AttendanceCalendarCard
+          year={year}
+          month={month}
+          hideLeaveLegend
+          onMonthStatuses={setDayStatuses}
+        />
       </ScrollView>
     </SafeAreaView>
   );

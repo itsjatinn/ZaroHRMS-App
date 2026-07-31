@@ -18,9 +18,12 @@ import ProfileCompletionCard, {
 } from '../../../src/components/ProfileCompletionCard';
 import ProfileCompletionOverlay from '../../../src/components/ProfileCompletionOverlay';
 import { EXIT_DURATION, EXIT_EASING, LAND_RISE } from '../../../src/components/morphTiming';
+import { useModuleGate } from '../../../src/api/modules';
+import { useAuth } from '../../../src/auth/AuthContext';
 import ClockInCard from '../../../src/components/ClockInCard';
 import LeaveBalanceCard from '../../../src/components/LeaveBalanceCard';
 import AttendanceCalendarCard from '../../../src/components/AttendanceCalendarCard';
+import PendingApprovalsCard from '../../../src/components/PendingApprovalsCard';
 import QuickActionsCard from '../../../src/components/quickActions/QuickActionsCard';
 
 // Shown once per app launch while the profile is incomplete. This module-level
@@ -95,6 +98,12 @@ function LandingCard({ animateIn, onClose }: { animateIn: boolean; onClose: () =
 
 export default function Index() {
   const insets = useSafeAreaInsets();
+  // Licensed-module gate, as on the web employee home: attendance cards only
+  // for attendance orgs, the leave card only for leave orgs. Fails closed
+  // while the list loads so a disabled module's card never flashes in; the
+  // demo session shows everything.
+  const { isBackendSession } = useAuth();
+  const gate = useModuleGate(isBackendSession);
 
   const [showPopup, setShowPopup] = useState(() => {
     if (PROFILE_INCOMPLETE && !popupShownThisLaunch) {
@@ -132,11 +141,14 @@ export default function Index() {
               onClose={() => setCardDismissed(true)}
             />
           ) : null}
-          <ClockInCard />
+          {gate.attendanceOn ? <ClockInCard /> : null}
 
-          <LeaveBalanceCard />
+          {/* Renders only for managers; hides itself otherwise. */}
+          <PendingApprovalsCard />
 
-          <AttendanceCalendarCard />
+          {gate.leaveOn ? <LeaveBalanceCard /> : null}
+
+          {gate.attendanceOn || gate.leaveOn ? <AttendanceCalendarCard /> : null}
 
           <QuickActionsCard />
         </View>

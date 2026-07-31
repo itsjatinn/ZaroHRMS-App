@@ -47,3 +47,55 @@ export function toPercent(d: MonthData): number {
   if (d.working === 0) return 0;
   return Math.round((d.present / d.working) * 100);
 }
+
+/**
+ * Counts a live month's day statuses into the summary grid's shape.
+ *
+ * "Working days" is present + absent + late + leave — the days that actually
+ * carry a state. Holidays and week-offs are excluded so the percentage answers
+ * "of the days I was expected, how many did I make?" rather than being diluted
+ * by days nobody works.
+ */
+export function fromDayStatuses(statuses: Record<string, string>): MonthData {
+  let present = 0;
+  let absent = 0;
+  let leave = 0;
+
+  for (const status of Object.values(statuses)) {
+    switch (status) {
+      case 'present':
+      case 'wfh':
+        present += 1;
+        break;
+      case 'half':
+        // A half day counts as attendance, but only half of one.
+        present += 0.5;
+        leave += 0.5;
+        break;
+      case 'absent':
+        absent += 1;
+        break;
+      case 'applied':
+      case 'approved':
+      case 'compoff':
+      case 'lop':
+      case 'optional-claimed':
+        leave += 1;
+        break;
+      default:
+        // holiday, optional-pending, work-applied, today: not a worked day.
+        break;
+    }
+  }
+
+  // The calendar endpoint carries no late flag, so this stays 0 until a
+  // late-arrival source is wired — better than inventing a number.
+  const late = 0;
+  return {
+    present,
+    absent,
+    late,
+    leave,
+    working: present + absent + leave,
+  };
+}

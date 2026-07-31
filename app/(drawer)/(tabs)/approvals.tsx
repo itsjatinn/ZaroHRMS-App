@@ -1,23 +1,27 @@
 import { Feather } from '@expo/vector-icons';
 import { Redirect } from 'expo-router';
 import { useMemo, useState } from 'react';
-import { Alert, LayoutAnimation, Platform, Pressable, ScrollView, Text, TextInput, UIManager, View } from 'react-native';
+import { LayoutAnimation, Platform, Pressable, ScrollView, Text, TextInput, UIManager, View } from 'react-native';
+import { Alert } from '../../../src/components/CrossAlert';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import {
+  useDecideApproval,
+  useManagerApprovals,
+} from '../../../src/api/approvals';
 import { useAuth } from '../../../src/auth/AuthContext';
 import BackButton from '../../../src/components/BackButton';
-import DelegateApprovalsModal from '../../../src/components/approvals/DelegateApprovalsModal';
 import {
   INITIAL_APPROVALS,
-  INITIAL_DELEGATIONS,
   STATUS_FILTERS,
   STATUS_STYLE,
+  toApproval,
   TYPE_FILTERS,
   TYPE_STYLE,
   type Approval,
   type ApprovalStatus,
-  type Delegation,
 } from '../../../src/components/approvals/approvalsData';
+import { useIsManager } from '../../../src/api/team';
 import { cardShadow } from '../../../src/components/shadow';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -65,7 +69,10 @@ function ApprovalCard({
   return (
     <View className="overflow-hidden rounded-2xl border border-slate-200 bg-white" style={cardShadow}>
       {/* Collapsed summary — enough to triage without opening the card. */}
-      <Pressable onPress={onToggle} className="p-4 active:opacity-90">
+      <Pressable
+        onPress={onToggle}
+        className={`${expanded ? 'px-4 pb-2 pt-4' : 'p-4'} active:opacity-90`}
+      >
         <View className="flex-row items-start">
           <View className="mr-3 h-10 w-10 items-center justify-center rounded-full bg-slate-100">
             <Text className="text-xs font-bold text-slate-500">{request.initials}</Text>
@@ -82,19 +89,23 @@ function ApprovalCard({
               </View>
               <Text className="rounded-md bg-slate-100 px-2 py-0.5 text-[9px] font-semibold text-slate-500">{request.stage}</Text>
             </View>
-            <Text className="mt-1.5 text-[11px] text-slate-500" numberOfLines={1}>
-              {request.title} · {request.days} day{request.days === 1 ? '' : 's'} · {request.from} to {request.to}
-            </Text>
+            {!expanded ? (
+              <Text className="mt-1.5 text-[11px] text-slate-500" numberOfLines={1}>
+                {request.title} · {request.days} day{request.days === 1 ? '' : 's'} · {request.from} to {request.to}
+              </Text>
+            ) : null}
           </View>
           <View className="ml-2 items-end">
             <Text className="rounded-full px-2.5 py-1 text-[10px] font-bold" style={{ backgroundColor: statusStyle.bg, color: statusStyle.text }}>
               {request.status}
             </Text>
-            <View className="mt-1.5 flex-row items-center">
-              <Feather name="clock" size={9} color="#94A3B8" />
-              <Text className="ml-1 text-[9px] text-slate-400">{request.submitted}</Text>
+            <View className="mt-1.5 flex-row items-center gap-2">
+              <View className="flex-row items-center">
+                <Feather name="clock" size={9} color="#94A3B8" />
+                <Text className="ml-1 text-[9px] text-slate-400">{request.submitted}</Text>
+              </View>
+              <Feather name={expanded ? 'chevron-up' : 'chevron-down'} size={16} color="#94A3B8" />
             </View>
-            <Feather name={expanded ? 'chevron-up' : 'chevron-down'} size={16} color="#94A3B8" style={{ marginTop: 6 }} />
           </View>
         </View>
       </Pressable>
@@ -104,7 +115,7 @@ function ApprovalCard({
           <Text className="text-xs leading-5 text-slate-500">{request.reason}</Text>
 
           <View className="mt-3 flex-row rounded-xl bg-slate-50 p-3">
-            <DetailCell label="Type" value={request.title} />
+            <DetailCell label="Type" value={request.type} />
             <DetailCell label="Days" value={`${request.days}`} />
             <DetailCell label="From" value={request.from} />
             <DetailCell label="To" value={request.to} />
@@ -170,15 +181,36 @@ function ApprovalCard({
 }
 
 export default function ApprovalsScreen() {
-  const { userRole } = useAuth();
+  const { isBackendSession } = useAuth();
+  const managerAccess = useIsManager();
   const insets = useSafeAreaInsets();
-  const [requests, setRequests] = useState(INITIAL_APPROVALS);
-  const [delegations, setDelegations] = useState(INITIAL_DELEGATIONS);
+
+  // Live queue: the same status=all fetch the web makes, so the tab counts are
+  // real. Locally decided ids overlay the fetch until the refetch lands. The
+  // demo session keeps its sample queue.
+  const queueQuery = useManagerApprovals(isBackendSession);
+  const decide = useDecideApproval();
+  const [decidedLocally, setDecidedLocally] = useState<
+    Record<string, ApprovalStatus>
+  >({});
+  const [demoRequests, setDemoRequests] = useState(INITIAL_APPROVALS);
+
+  const requests = useMemo<Approval[]>(() => {
+    if (!isBackendSession) return demoRequests;
+    const slices = queueQuery.data;
+    const rows = [
+      ...(slices?.pending ?? []).map((row) => toApproval(row, 'Pending')),
+      ...(slices?.approved ?? []).map((row) => toApproval(row, 'Approved')),
+      ...(slices?.rejected ?? []).map((row) => toApproval(row, 'Rejected')),
+    ];
+    return rows.map((row) =>
+      decidedLocally[row.id] ? { ...row, status: decidedLocally[row.id] } : row,
+    );
+  }, [isBackendSession, queueQuery.data, decidedLocally, demoRequests]);
   const [type, setType] = useState<(typeof TYPE_FILTERS)[number]>('All types');
   const [status, setStatus] = useState<(typeof STATUS_FILTERS)[number]>('Pending');
   const [query, setQuery] = useState('');
-  const [expandedId, setExpandedId] = useState<string | null>(INITIAL_APPROVALS[0]?.id ?? null);
-  const [delegateOpen, setDelegateOpen] = useState(false);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const pendingCount = useMemo(
     () => requests.filter((item) => item.status === 'Pending').length,
@@ -199,7 +231,12 @@ export default function ApprovalsScreen() {
     });
   }, [requests, type, status, query]);
 
-  if (userRole !== 'manager') return <Redirect href="/" />;
+  // Composite gate (explicit role OR reporting lines), and only bounce once
+  // the server has answered — the old role-only check here is what made the
+  // tab appear and then instantly redirect home for reporting-line managers.
+  if (managerAccess.ready && !managerAccess.isManager) {
+    return <Redirect href="/" />;
+  }
 
   const toggle = (id: string) => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
@@ -208,23 +245,43 @@ export default function ApprovalsScreen() {
 
   const updateDecision = (id: string, nextStatus: ApprovalStatus) => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    setRequests((current) =>
-      current.map((item) => (item.id === id ? { ...item, status: nextStatus } : item)),
-    );
-  };
 
-  const addDelegation = (delegation: Omit<Delegation, 'id' | 'state'>) => {
-    setDelegations((current) => [
-      { ...delegation, id: `DEL-${current.length + 3}`, state: 'Scheduled' },
-      ...current,
-    ]);
-    setDelegateOpen(false);
-    Alert.alert('Delegation added', `${delegation.delegate} will action your queue from ${delegation.start} to ${delegation.end}.`);
-  };
+    if (!isBackendSession) {
+      setDemoRequests((current) =>
+        current.map((item) =>
+          item.id === id ? { ...item, status: nextStatus } : item,
+        ),
+      );
+      return;
+    }
 
-  const revokeDelegation = (id: string) => {
-    setDelegations((current) =>
-      current.map((item) => (item.id === id ? { ...item, state: 'Revoked' } : item)),
+    // The adapter keeps the raw queue row on the view model — the decision
+    // endpoint and payload depend on its kind (comp-off, optional holiday and
+    // cancellations all route differently).
+    const target = requests.find((item) => item.id === id) as
+      | (Approval & { serverRow?: import('../../../src/api/approvals').ServerApprovalRow })
+      | undefined;
+    if (!target?.serverRow) return;
+
+    // Optimistic flip; the refetch after the PATCH settles reconciles it.
+    setDecidedLocally((current) => ({ ...current, [id]: nextStatus }));
+    decide.mutate(
+      { row: target.serverRow, approve: nextStatus === 'Approved' },
+      {
+        onError: (error) => {
+          setDecidedLocally((current) => {
+            const next = { ...current };
+            delete next[id];
+            return next;
+          });
+          Alert.alert(
+            'Could not submit your decision',
+            error instanceof Error && error.message
+              ? error.message
+              : 'Please try again in a moment.',
+          );
+        },
+      },
     );
   };
 
@@ -258,14 +315,6 @@ export default function ApprovalsScreen() {
               </Pressable>
             ) : null}
           </View>
-
-          <Pressable
-            onPress={() => setDelegateOpen(true)}
-            className="flex-row items-center justify-center rounded-xl bg-ink py-3 active:opacity-80"
-          >
-            <Feather name="user-check" size={15} color="#FFFFFF" />
-            <Text className="ml-2 text-sm font-bold text-white">Delegate approvals</Text>
-          </Pressable>
 
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
             {TYPE_FILTERS.map((item) => (
@@ -326,13 +375,6 @@ export default function ApprovalsScreen() {
         </View>
       </ScrollView>
 
-      <DelegateApprovalsModal
-        visible={delegateOpen}
-        delegations={delegations}
-        onClose={() => setDelegateOpen(false)}
-        onDelegate={addDelegation}
-        onRevoke={revokeDelegation}
-      />
     </SafeAreaView>
   );
 }

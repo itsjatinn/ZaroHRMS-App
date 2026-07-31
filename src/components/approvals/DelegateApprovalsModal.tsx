@@ -1,4 +1,4 @@
-import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
+import DateTimePicker, { type DateTimePickerEvent } from '../CrossDatePicker';
 import { Feather } from '@expo/vector-icons';
 import { useMemo, useState } from 'react';
 import { Modal, Pressable, ScrollView, Text, TextInput, View } from 'react-native';

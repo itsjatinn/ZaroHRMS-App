@@ -1,12 +1,19 @@
-import { useRouter } from 'expo-router';
 import { Sparkles } from 'lucide-react-native';
 import { useMemo, useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
+import { Alert } from '../../src/components/CrossAlert';
 import {
   SafeAreaView,
   useSafeAreaInsets,
 } from 'react-native-safe-area-context';
 
+import {
+  useMyCelebrations,
+  useSendCelebrationWish,
+  wishKey,
+  type WishTarget,
+} from '../../src/api/celebrations';
+import { useAuth } from '../../src/auth/AuthContext';
 import BackButton from '../../src/components/BackButton';
 import CelebrationCard from '../../src/components/celebrations/CelebrationCard';
 import {
@@ -27,12 +34,32 @@ import WishComposerSheet from '../../src/components/celebrations/WishComposerShe
 
 export default function Celebrations() {
   const insets = useSafeAreaInsets();
-  const router = useRouter();
+  const { isBackendSession } = useAuth();
 
   const [kind, setKind] = useState<KindFilter>('all');
   const [composing, setComposing] = useState<Celebration | null>(null);
-  /** Ids already wished this session — keeps the card's sent state sticky. */
-  const [wished, setWished] = useState<Set<string>>(() => new Set());
+  /** Occasions wished this session — merged with the server's `wished` flag. */
+  const [justWished, setJustWished] = useState<Set<string>>(() => new Set());
+
+  // Live rows from the same endpoint the web page reads; the offline demo
+  // session keeps the sample list (no token to fetch with).
+  const celebrationsQuery = useMyCelebrations(isBackendSession);
+  const sendWishMutation = useSendCelebrationWish();
+  const items = isBackendSession
+    ? (celebrationsQuery.data ?? [])
+    : CELEBRATIONS;
+
+  /** The occasion identity a wish posts with — year falls back to the date. */
+  const targetFor = (c: Celebration): WishTarget => ({
+    employeeId: c.employeeId,
+    kind: c.kind,
+    year: c.year ?? new Date(c.date).getFullYear(),
+  });
+
+  // Server `wished` covers reloads and other devices; justWished covers taps
+  // that haven't round-tripped yet — the same merge the web makes.
+  const isWished = (c: Celebration) =>
+    Boolean(c.wished) || justWished.has(wishKey(targetFor(c)));
 
   // Everything happening today gets its own hero strip, so it is excluded
   // from the upcoming list below to avoid showing the same person twice.
@@ -40,21 +67,21 @@ export default function Celebrations() {
   // read as broken.
   const todayItems = useMemo(
     () =>
-      CELEBRATIONS.filter((c) => {
+      items.filter((c) => {
         if (!inNextNDays(c.date, 0)) return false;
         return kind === 'all' || c.kind === kind;
       }),
-    [kind],
+    [items, kind],
   );
 
   const upcoming = useMemo(() => {
-    return CELEBRATIONS.filter((c) => {
+    return items.filter((c) => {
       if (!inNextNDays(c.date, UPCOMING_DAYS)) return false;
       if (inNextNDays(c.date, 0)) return false;
       if (kind !== 'all' && c.kind !== kind) return false;
       return true;
     }).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-  }, [kind]);
+  }, [items, kind]);
 
   // Collapse the sorted list into one section per day so it reads as a timeline.
   const grouped = useMemo(() => {
@@ -68,16 +95,34 @@ export default function Celebrations() {
     return out;
   }, [upcoming]);
 
-  const openProfile = () => router.push('/view-profile');
+  // Posts the wish with the occasion's identity; the card flips into its sent
+  // state optimistically and the list refresh confirms it, as on the web. The
+  // demo session keeps the tap local.
+  const sendWish = (c: Celebration, message?: string) => {
+    const target = targetFor(c);
+    const markSent = () =>
+      setJustWished((prev) => new Set(prev).add(wishKey(target)));
 
-  // Mock send — the real flow will post to /api/celebrations/{id}/wish. The
-  // card flips into its sent state, same as the web page.
-  const sendWish = (c: Celebration) => {
-    setWished((prev) => {
-      const next = new Set(prev);
-      next.add(c.id);
-      return next;
-    });
+    if (!isBackendSession) {
+      markSent();
+      setComposing(null);
+      return;
+    }
+
+    sendWishMutation.mutate(
+      { ...target, message: message?.trim() || undefined },
+      {
+        onSuccess: markSent,
+        onError: (error) => {
+          Alert.alert(
+            'Could not send your wish',
+            error instanceof Error && error.message
+              ? error.message
+              : 'Please try again in a moment.',
+          );
+        },
+      },
+    );
     setComposing(null);
   };
 
@@ -156,8 +201,7 @@ export default function Celebrations() {
                   key={c.id}
                   celebration={c}
                   highlight
-                  wished={wished.has(c.id)}
-                  onPressPerson={openProfile}
+                  wished={isWished(c)}
                   onPressAction={setComposing}
                 />
               ))}
@@ -221,9 +265,8 @@ export default function Celebrations() {
                       <CelebrationCard
                         key={c.id}
                         celebration={c}
-                        wished={wished.has(c.id)}
-                        onPressPerson={openProfile}
-                        onPressAction={setComposing}
+                        wished={isWished(c)}
+                              onPressAction={setComposing}
                       />
                     ))}
                   </View>

@@ -13,6 +13,13 @@ export type LeaveType = {
   label: string; // e.g. "Annual Leave"
   short: string; // dropdown / balance label
   remaining: number; // days still available
+  /** HR-configured rules. Optional so the demo list can omit them. */
+  paid?: boolean;
+  /** 0 or absent = no cap on a single stretch. */
+  maxConsecutiveDays?: number;
+  /** Counts intervening week-offs/holidays. Employees never receive this
+   *  flag from the server, so it stays false client-side on both products. */
+  sandwichRule?: boolean;
 };
 
 /** Offline demo fallback only — real types come from useApplicableLeaveTypes. */

@@ -1,123 +1,92 @@
-import {
-  BellRing,
-  Cake,
-  CalendarCheck2,
-  CalendarClock,
-  FileText,
-  PartyPopper,
-  type LucideIcon,
-} from 'lucide-react-native';
-import { useSyncExternalStore } from 'react';
+import type { ServerNotification } from '../../api/notifications';
+import { useUnreadNotificationCount } from '../../api/notifications';
+import { useAuth } from '../../auth/AuthContext';
 
-export type NotificationDay = 'Today' | 'Yesterday' | 'Earlier';
+/**
+ * Notification sample data + the unread badge hook.
+ *
+ * The feed itself is server-owned (see src/api/notifications.ts). What lives
+ * here is the offline demo set — written in the server's own row shape, so the
+ * page and card render it through exactly the same code path as live data.
+ */
 
-export type AppNotification = {
-  id: string;
-  title: string;
-  body: string;
-  time: string; // display-ready, e.g. "2h ago"
-  day: NotificationDay;
-  icon: LucideIcon;
-  href?: string; // route to open on tap
-  unread: boolean;
-};
+const HOUR = 3600_000;
+const DAY = 24 * HOUR;
+const ago = (ms: number) => new Date(Date.now() - ms).toISOString();
 
-// ---- Demo feed (personal events only — company news lives in Announcements) ----
-let notifications: AppNotification[] = [
+export const DEMO_NOTIFICATIONS: ServerNotification[] = [
   {
     id: 'n1',
+    type: 'LEAVE_APPROVED',
     title: 'Leave request approved',
     body: 'Your sick leave for 28 Jul was approved by Riya Mehta.',
-    time: '2h ago',
-    day: 'Today',
-    icon: CalendarCheck2,
-    href: '/requests',
-    unread: true,
+    link: '/dashboard/employee/leave',
+    metadata: null,
+    readAt: null,
+    createdAt: ago(2 * HOUR),
   },
   {
     id: 'n2',
-    title: 'Missed check-in?',
-    body: 'No check-in recorded today. Regularize it if you forgot.',
-    time: '9:41 AM',
-    day: 'Today',
-    icon: BellRing,
-    href: '/regularize',
-    unread: true,
+    type: 'ATTENDANCE_MISSED_PUNCH',
+    title: 'Missed punch-out',
+    body: 'You did not punch out yesterday. Regularize it to keep the day marked present.',
+    link: '/modules/attendance/regularize',
+    metadata: null,
+    readAt: null,
+    createdAt: ago(5 * HOUR),
   },
   {
     id: 'n3',
-    title: 'Work anniversary',
-    body: 'Arjun Nair completes 3 years at Zaro. Say congrats!',
-    time: 'Yesterday',
-    day: 'Yesterday',
-    icon: PartyPopper,
-    unread: true,
+    type: 'PAYSLIP_AVAILABLE',
+    title: 'Payslip available',
+    body: 'Your payslip for June 2026 is ready to download.',
+    link: '/dashboard/employee/payslips',
+    metadata: null,
+    readAt: null,
+    createdAt: ago(26 * HOUR),
   },
   {
     id: 'n4',
-    title: 'Regularization pending',
-    body: 'Your "Missed punch" request is awaiting Reporting Manager approval.',
-    time: 'Yesterday',
-    day: 'Yesterday',
-    icon: CalendarClock,
-    href: '/requests',
-    unread: false,
+    type: 'REGULARIZE_APPROVED',
+    title: 'Regularization approved',
+    body: 'Your missed punch for 24 Jul was regularized.',
+    link: '/modules/attendance',
+    metadata: null,
+    readAt: ago(27 * HOUR),
+    createdAt: ago(28 * HOUR),
   },
   {
     id: 'n5',
-    title: 'Upcoming birthday',
-    body: "Priya Sharma's birthday is on 18 Jul.",
-    time: '3d ago',
-    day: 'Earlier',
-    icon: Cake,
-    unread: false,
+    type: 'OPTIONAL_HOLIDAY_CANCELLED',
+    title: 'Optional holiday claim cancelled',
+    body: 'Your claim for Raksha Bandhan was cancelled.',
+    link: '/modules/attendance/holidaycalendar',
+    metadata: null,
+    readAt: ago(3 * DAY),
+    createdAt: ago(3 * DAY),
   },
   {
     id: 'n6',
-    title: 'Leave policy updated',
-    body: 'The FY27 leave policy has been published. Review the changes.',
-    time: '5d ago',
-    day: 'Earlier',
-    icon: FileText,
-    href: '/documents',
-    unread: false,
+    type: 'SHIFT_SWAP_UPDATE',
+    title: 'Shift swap confirmed',
+    body: 'Your swap with Vikram K. for 02 Aug is confirmed.',
+    link: '/modules/attendance',
+    metadata: null,
+    readAt: ago(4 * DAY),
+    createdAt: ago(4 * DAY),
   },
 ];
 
-// ---- Minimal external store so headers and the screen share live state ----
-const listeners = new Set<() => void>();
-
-function emit() {
-  listeners.forEach((l) => l());
-}
-
-function subscribe(listener: () => void) {
-  listeners.add(listener);
-  return () => {
-    listeners.delete(listener);
-  };
-}
-
-function getNotifications() {
-  return notifications;
-}
-
-function getUnreadCount() {
-  return notifications.filter((n) => n.unread).length;
-}
-
-export function markAllRead() {
-  if (!notifications.some((n) => n.unread)) return;
-  notifications = notifications.map((n) => ({ ...n, unread: false }));
-  emit();
-}
-
-/** Live notification list (re-renders on store changes). */
-export function useNotifications() {
-  return useSyncExternalStore(subscribe, getNotifications);
-}
-
-/** Live unread count — drives the gold dot on header bells. */
-export function useUnreadCount() {
-  return useSyncExternalStore(subscribe, getUnreadCount);
+/**
+ * Unread count for the header bells. A live session reads the zone-aware
+ * endpoint and re-polls, so a notification raised elsewhere lights the bell;
+ * the demo session counts its own sample rows.
+ */
+export function useUnreadCount(): number {
+  const { isBackendSession } = useAuth();
+  const query = useUnreadNotificationCount(isBackendSession);
+  if (!isBackendSession) {
+    return DEMO_NOTIFICATIONS.filter((n) => !n.readAt).length;
+  }
+  return query.data ?? 0;
 }

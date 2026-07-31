@@ -2,7 +2,7 @@ import DateTimePicker, {
   type DateTimePickerEvent,
 } from '../CrossDatePicker';
 import { Check, Lock, Pencil, X } from 'lucide-react-native';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Modal,
   Platform,
@@ -21,6 +21,8 @@ type Props = {
   showTitle?: boolean;
   /** Read-only (HR-owned) — no edit controls, shows a lock instead. */
   readOnly?: boolean;
+  /** Fired after a row commits, with the item and its new value. */
+  onCommit?: (item: InfoItem, value: string) => void;
 };
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -46,8 +48,21 @@ function formatDate(d: Date): string {
 // A group of editable label/value rows rendered plainly (no card chrome). Each
 // row edits inline with the right control for its type: text input, dropdown
 // (select), or the native date picker (date). Edits are local state.
-export default function InfoCard({ title, items, showTitle = true, readOnly = false }: Props) {
+export default function InfoCard({
+  title,
+  items,
+  showTitle = true,
+  readOnly = false,
+  onCommit,
+}: Props) {
   const [values, setValues] = useState<string[]>(() => items.map((i) => i.value));
+
+  // Live data lands after mount (and after saves round-trip) — resync then,
+  // so the rows show the server's truth rather than the first render's.
+  const serverValues = items.map((i) => i.value).join('\u001f');
+  useEffect(() => {
+    setValues(serverValues.split('\u001f'));
+  }, [serverValues]);
   const [editing, setEditing] = useState<number | null>(null); // text-editing row
   const [draft, setDraft] = useState('');
   const [selectRow, setSelectRow] = useState<number | null>(null); // dropdown open
@@ -55,6 +70,7 @@ export default function InfoCard({ title, items, showTitle = true, readOnly = fa
 
   const commit = (index: number, next: string) => {
     setValues((prev) => prev.map((v, i) => (i === index ? next : v)));
+    onCommit?.(items[index], next);
   };
 
   // --- text ---
@@ -123,7 +139,7 @@ export default function InfoCard({ title, items, showTitle = true, readOnly = fa
             </View>
 
             {/* Row action */}
-            {readOnly ? (
+            {readOnly || item.locked ? (
               // HR-owned field: no editing, just a subtle lock.
               <View className="h-8 w-8 items-center justify-center">
                 <Lock size={14} color="#CBD5E1" />

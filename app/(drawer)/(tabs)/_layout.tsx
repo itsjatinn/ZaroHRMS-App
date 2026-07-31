@@ -10,7 +10,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { useAuth } from '../../../src/auth/AuthContext';
+import { useIsManager } from '../../../src/api/team';
 
 const ACTIVE = '#F5D14E';
 const INACTIVE = '#FFFFFF';
@@ -25,7 +25,6 @@ const ICONS: Record<string, (color: string) => ReactNode> = {
   ),
   leave: (color) => <Feather name="calendar" size={22} color={color} />,
   approvals: (color) => <Feather name="check-circle" size={22} color={color} />,
-  'my-team': (color) => <Feather name="users" size={22} color={color} />,
 };
 
 // Shrinks + rounds the screen as the drawer opens (0 = closed, 1 = open),
@@ -161,8 +160,9 @@ function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
 }
 
 export default function TabsLayout() {
-  const { userRole } = useAuth();
-  const isManager = userRole === 'manager';
+  // Composite: explicit role OR reporting lines — most managers hold a plain
+  // EMPLOYEE account role, which is why the tabs never appeared for them.
+  const { isManager } = useIsManager();
   return (
     <AnimatedScene>
       <Tabs
@@ -182,9 +182,6 @@ export default function TabsLayout() {
         </Tabs.Protected>
         <Tabs.Screen name="attendance" options={{ title: 'Attendance' }} />
         <Tabs.Screen name="leave" options={{ title: 'Leave' }} />
-        <Tabs.Protected guard={isManager}>
-          <Tabs.Screen name="my-team" options={{ title: 'My Team' }} />
-        </Tabs.Protected>
       </Tabs>
     </AnimatedScene>
   );

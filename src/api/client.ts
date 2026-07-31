@@ -112,6 +112,12 @@ async function refreshAccessToken(): Promise<string | null> {
         headers: { 'Content-Type': 'application/json' },
         body: '{}',
         signal: timeout.signal,
+        // The refresh token is an HttpOnly cookie on the API origin. Native
+        // replays it from the cookie jar regardless, but a browser drops it on
+        // a cross-origin request unless credentials are explicitly included —
+        // without this the web build silently loses every session at the
+        // 15-minute access-token expiry.
+        credentials: 'include',
       });
       if (!response.ok) return null;
       const body = (await response.json()) as { accessToken?: string };
@@ -144,6 +150,10 @@ function buildInit(options: RequestOptions, token: string | null): RequestInit {
   return {
     method: options.method ?? 'GET',
     headers,
+    // Applies to the login request too (anonymous), which is what lets the
+    // browser *store* the HttpOnly refresh cookie the backend sets — without
+    // it there is nothing for refreshAccessToken to replay later.
+    credentials: 'include',
     body:
       options.body === undefined
         ? undefined

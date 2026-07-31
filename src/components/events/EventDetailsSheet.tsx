@@ -11,7 +11,8 @@ import {
   X,
 } from 'lucide-react-native';
 import { useState } from 'react';
-import { Alert, Modal, Pressable, ScrollView, Text, View } from 'react-native';
+import { Modal, Pressable, ScrollView, Text, View } from 'react-native';
+import { Alert } from '../CrossAlert';
 
 import {
   formatFullDate,

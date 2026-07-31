@@ -4,12 +4,20 @@ import { useMemo, useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import {
+  useApplicableLeaveTypes,
+  useCancelMyRequest,
+  useMyRequests,
+} from '../../../src/api/leave';
+import { useAuth } from '../../../src/auth/AuthContext';
 import BalanceTile, {
   TILE_GAP,
   TILE_WIDTH,
 } from '../../../src/components/leave/BalanceTile';
+import CancelLeaveDialog from '../../../src/components/leave/CancelLeaveDialog';
 import RequestCard from '../../../src/components/leave/RequestCard';
-import { REQUESTS } from '../../../src/components/leave/requestsData';
+import type { Request } from '../../../src/components/leave/requestsData';
+import { REQUESTS, toRequest } from '../../../src/components/leave/requestsData';
 import { useUnreadCount } from '../../../src/components/notifications/notificationsStore';
 import { cardShadow } from '../../../src/components/shadow';
 
@@ -23,6 +31,16 @@ const BALANCES = [
 
 // Mirrors the view-all page. Cancelled and withdrawn requests were previously
 // unreachable from either screen.
+/** Accents assigned by position — same rotation as the Apply Leave tiles. */
+const TILE_ACCENTS = [
+  '#E07856',
+  '#5E9B7B',
+  '#D4A24A',
+  '#7C7BD8',
+  '#2F6D7F',
+  '#B96A00',
+];
+
 const FILTERS = [
   'All',
   'Pending',
@@ -37,32 +55,60 @@ type Filter = (typeof FILTERS)[number];
 export default function LeaveOverviewScreen() {
   const router = useRouter();
   const unreadCount = useUnreadCount();
+  const { isBackendSession } = useAuth();
   const [filter, setFilter] = useState<Filter>('All');
+  const cancelRequest = useCancelMyRequest();
+  const [cancelTarget, setCancelTarget] = useState<Request | null>(null);
+
+  // Live balances (tenant types, gender-filtered) and the real request feed;
+  // the demo session keeps its samples.
+  const applicable = useApplicableLeaveTypes(isBackendSession);
+  const requestsQuery = useMyRequests(isBackendSession);
+
+  const balances = useMemo(
+    () =>
+      isBackendSession
+        ? applicable.types.map((type, index) => ({
+            label: type.short,
+            value: type.remaining,
+            accent: TILE_ACCENTS[index % TILE_ACCENTS.length],
+          }))
+        : BALANCES,
+    [isBackendSession, applicable.types],
+  );
+
+  const requests = useMemo(
+    () =>
+      isBackendSession
+        ? (requestsQuery.data ?? []).map(toRequest)
+        : REQUESTS,
+    [isBackendSession, requestsQuery.data],
+  );
 
   const counts = useMemo(
     () => ({
-      Pending: REQUESTS.filter((r) => r.status === 'Pending').length,
-      Approved: REQUESTS.filter((r) => r.status === 'Approved').length,
-      Rejected: REQUESTS.filter((r) => r.status === 'Rejected').length,
-      Cancelled: REQUESTS.filter((r) => r.status === 'Cancelled').length,
-      'Cancellation requested': REQUESTS.filter(
+      Pending: requests.filter((r) => r.status === 'Pending').length,
+      Approved: requests.filter((r) => r.status === 'Approved').length,
+      Rejected: requests.filter((r) => r.status === 'Rejected').length,
+      Cancelled: requests.filter((r) => r.status === 'Cancelled').length,
+      'Cancellation requested': requests.filter(
         (r) => r.status === 'Cancellation requested',
       ).length,
-      'Cancellation rejected': REQUESTS.filter(
+      'Cancellation rejected': requests.filter(
         (r) => r.status === 'Cancellation rejected',
       ).length,
     }),
-    [],
+    [requests],
   );
 
   // Overview shows only the most recent few; the rest live on "View all".
   const visible = useMemo(() => {
     const matched =
       filter === 'All'
-        ? REQUESTS
-        : REQUESTS.filter((r) => r.status === filter);
+        ? requests
+        : requests.filter((r) => r.status === filter);
     return matched.slice(0, 3);
-  }, [filter]);
+  }, [filter, requests]);
 
   const goBack = () => {
     if (router.canGoBack()) router.back();
@@ -82,13 +128,15 @@ export default function LeaveOverviewScreen() {
           <Pressable
             onPress={goBack}
             hitSlop={8}
-            className="h-11 w-11 items-center justify-center active:scale-95"
+            className="h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white active:scale-95"
           >
-            <ChevronLeft size={24} color="#14323F" />
+            <ChevronLeft size={22} color="#14323F" />
           </Pressable>
           <View className="flex-1">
-            <Text className="text-lg font-bold text-ink">My Leave</Text>
-            <Text className="text-xs text-slate-400">
+            <Text className="text-[18px] font-bold leading-6 text-ink" numberOfLines={1}>
+              My Leave
+            </Text>
+            <Text className="text-xs leading-4 text-slate-400" numberOfLines={1}>
               Balances, requests & regularizations
             </Text>
           </View>
@@ -112,7 +160,7 @@ export default function LeaveOverviewScreen() {
           decelerationRate="fast"
           contentContainerClassName="gap-3 px-4 pt-4"
         >
-          {BALANCES.map((b) => (
+          {balances.map((b) => (
             <BalanceTile
               key={b.label}
               label={b.label}
@@ -213,16 +261,35 @@ export default function LeaveOverviewScreen() {
             <RequestCard
               key={r.id}
               type={r.type}
+              category={r.category}
+              reason={r.reason}
+              appliedOn={r.appliedOn}
+              actionDate={r.actionDate}
               dates={r.dates}
               days={r.days}
               status={r.status}
               icon={r.icon}
               rejectionReason={r.rejectionReason}
-              onCancel={() => {}}
+              // Same statuses the view-all page allows withdrawing.
+              onCancel={
+                r.status === 'Pending' || r.status === 'Approved'
+                  ? () => setCancelTarget(r)
+                  : undefined
+              }
             />
           ))}
         </View>
       </ScrollView>
+
+      <CancelLeaveDialog
+        request={cancelTarget}
+        onKeep={() => setCancelTarget(null)}
+        onConfirm={(request, reason) => {
+          setCancelTarget(null);
+          if (!isBackendSession) return;
+          cancelRequest.mutate({ id: request.id, reason });
+        }}
+      />
     </SafeAreaView>
   );
 }

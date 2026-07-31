@@ -1,5 +1,6 @@
 import { Ticket } from 'lucide-react-native';
-import { Alert, Pressable, ScrollView, Text, View } from 'react-native';
+import { Pressable, ScrollView, Text, View } from 'react-native';
+import { Alert } from '../../src/components/CrossAlert';
 import {
   SafeAreaView,
   useSafeAreaInsets,

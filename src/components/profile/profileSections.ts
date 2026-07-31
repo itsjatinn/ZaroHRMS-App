@@ -1,4 +1,5 @@
 import {
+  Award,
   BadgeCheck,
   Briefcase,
   Building2,
@@ -10,6 +11,7 @@ import {
   Heart,
   MapPin,
   User,
+  UserCircle,
   Users,
   Wallet,
 } from 'lucide-react-native';
@@ -31,12 +33,14 @@ export type ProfileSection = {
 
 // The profile section menu (matches the design).
 export const PROFILE_SECTIONS: ProfileSection[] = [
+  { key: 'overview', label: 'Overview', icon: UserCircle, color: '#2563EB', chip: 'bg-blue-100', readOnly: true },
   { key: 'personal-info', label: 'Personal info', icon: User, color: '#6B5FCF', chip: 'bg-violet-100' },
   { key: 'address', label: 'Address', icon: MapPin, color: '#059669', chip: 'bg-emerald-100' },
   { key: 'bank-identity', label: 'Bank & identity', icon: CreditCard, color: '#0EA5E9', chip: 'bg-sky-100' },
   { key: 'family-nominees', label: 'Family & nominees', icon: Users, color: '#E0785C', chip: 'bg-rose-100' },
   { key: 'education', label: 'Education', icon: GraduationCap, color: '#D9A53B', chip: 'bg-amber-100' },
   { key: 'experience', label: 'Experience', icon: Briefcase, color: '#2563EB', chip: 'bg-blue-100' },
+  { key: 'training', label: 'Training', icon: Award, color: '#D9A53B', chip: 'bg-amber-100', readOnly: true },
   { key: 'documents', label: 'Documents', icon: FileText, color: '#6B5FCF', chip: 'bg-violet-100' },
   { key: 'compensation', label: 'Compensation', icon: Wallet, color: '#059669', chip: 'bg-emerald-100', readOnly: true },
 ];
@@ -69,6 +73,35 @@ export const EXPERIENCE_TEMPLATE: Card = {
 
 // Content rendered for each (unlocked) section.
 export const SECTION_CARDS: Record<string, Card[]> = {
+  overview: [
+    {
+      title: 'Employment',
+      items: [
+        { icon: BadgeCheck, label: 'Employee Code', value: 'ZR-1042', ...BLUE },
+        { icon: Briefcase, label: 'Designation', value: 'Senior Software Engineer', ...VIOLET },
+        { icon: Building2, label: 'Department', value: 'Engineering', ...GREEN },
+        { icon: User, label: 'Reporting Manager', value: 'Anita Kulkarni', ...AMBER },
+      ],
+    },
+    {
+      title: 'Status',
+      items: [
+        { icon: BadgeCheck, label: 'Employee Status', value: 'Active', ...GREEN },
+        { icon: CalendarDays, label: 'Date of Joining', value: '12 Jul 2021', ...AMBER },
+        { icon: MapPin, label: 'Work Location', value: 'Bengaluru', ...ROSE },
+      ],
+    },
+  ],
+  training: [
+    {
+      title: 'Secure Coding Practices',
+      items: [
+        { icon: Building2, label: 'Provider', value: 'Internal L&D', ...BLUE },
+        { icon: BadgeCheck, label: 'Status', value: 'Completed', ...GREEN },
+        { icon: CalendarDays, label: 'Duration', value: '4 Mar 2025 – 6 Mar 2025', ...AMBER },
+      ],
+    },
+  ],
   'personal-info': [{ title: 'Personal Information', items: PERSONAL_INFO }],
   address: [
     {

@@ -1,4 +1,5 @@
-import { Alert, Pressable, Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
+import { Alert } from '../CrossAlert';
 
 import { cardShadow } from '../shadow';
 import type { Contact } from './supportData';

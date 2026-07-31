@@ -71,21 +71,23 @@ export default function BackButton({
 
   return (
     <View className="flex-row items-center gap-3 px-4 pb-1 pt-2">
-      {/* Bare icon button, matching the home header (no pill/circle chrome). */}
+      {/* Square pill back control, shared across drawer screens. */}
       <Pressable
         onPress={goBack}
         hitSlop={12}
         accessibilityRole="button"
         accessibilityLabel="Go back"
-        className="h-11 w-11 items-center justify-center active:scale-95"
+        className="h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white active:scale-95"
       >
-        <ChevronLeft size={24} color="#14323F" />
+        <ChevronLeft size={22} color="#14323F" />
       </Pressable>
       {title ? (
         <View className="flex-1">
-          <Text className="text-lg font-bold text-ink">{title}</Text>
+          <Text className="text-[18px] font-bold leading-6 text-ink" numberOfLines={1}>
+            {title}
+          </Text>
           {subtitle ? (
-            <Text className="text-xs text-slate-400" numberOfLines={subtitleNumberOfLines}>
+            <Text className="text-xs leading-4 text-slate-400" numberOfLines={subtitleNumberOfLines}>
               {subtitle}
             </Text>
           ) : null}

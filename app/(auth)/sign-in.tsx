@@ -1,6 +1,6 @@
-import { Link } from 'expo-router';
-import { Check, Eye, EyeOff, Pencil } from 'lucide-react-native';
-import { useState } from 'react';
+import { Link, useLocalSearchParams } from 'expo-router';
+import { Check, Eye, EyeOff } from 'lucide-react-native';
+import { useRef, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 
 import { getTenantBrand, login, toAppRole } from '../../src/api/auth';
@@ -12,6 +12,7 @@ import {
 } from '../../src/auth/demoCredentials';
 import AuthButton from '../../src/components/auth/AuthButton';
 import AuthField from '../../src/components/auth/AuthField';
+import AuthForm from '../../src/components/auth/AuthForm';
 import AuthShell from '../../src/components/auth/AuthShell';
 import { Reveal, StaggerItem } from '../../src/components/auth/CardEntrance';
 import { font } from '../../src/components/auth/fonts';
@@ -28,14 +29,28 @@ export default function SignInScreen() {
   const { signIn, orgSlug, rememberedEmail } = useAuth();
 
   /**
+   * `?org=<slug>` carries the tenant across the panel's mobile redirect. The
+   * panel resolves the tenant from the subdomain (acme.hrms.zarohr.com), but
+   * the mobile build is served from a single host and cannot, so the slug has
+   * to ride along in the URL or the user lands on a form asking for an
+   * organization they may not know by name.
+   *
+   * The param wins over the remembered slug: it says where this user just came
+   * from, which beats whatever the device saw last.
+   */
+  const params = useLocalSearchParams<{ org?: string | string[] }>();
+  const orgParam = Array.isArray(params.org) ? params.org[0] : params.org;
+  const initialOrg = normalizeOrgSlug(orgParam ?? '') || orgSlug || '';
+
+  /**
    * The backend requires a tenant slug on every login and returns a generic
    * "Invalid credentials" when it doesn't resolve, so the org has to be a real
    * field. Once a device has signed in successfully the slug is remembered and
-   * the field collapses into a summary row with a Change affordance — the same
-   * shape the web login takes when it can derive the slug from the subdomain.
+   * the field collapses into a tappable summary row — the same shape the web
+   * login takes when it can derive the slug from the subdomain.
    */
-  const [org, setOrg] = useState(orgSlug ?? '');
-  const [editingOrg, setEditingOrg] = useState(orgSlug == null);
+  const [org, setOrg] = useState(initialOrg);
+  const [editingOrg, setEditingOrg] = useState(initialOrg === '');
   /** Organization name confirmed by the server, shown instead of the raw slug. */
   const [orgName, setOrgName] = useState<string | null>(null);
 
@@ -192,12 +207,30 @@ export default function SignInScreen() {
 
   const onPassword = step === 'password';
 
+  /**
+   * Whatever the current step's primary action is. Routed through <AuthForm>
+   * rather than called directly from the button so that on web it travels as a
+   * real form submission — the event browsers watch for before offering to save
+   * the credentials.
+   */
+  const submitStep = () => {
+    if (onPassword) void handleSignIn();
+    else void handleContinue();
+  };
+  const submitHandle = useRef<(() => void) | null>(null);
+
   return (
     <AuthShell
       title="Sign in"
       subtitle="Sign in with your work email to continue."
     >
       <View className="gap-4">
+        <AuthForm
+          onSubmit={submitStep}
+          submitHandle={submitHandle}
+          // Only on the password step, where the visible email field is gone.
+          hiddenUsername={onPassword ? email : undefined}
+        >
         {formError ? (
           <View className="rounded-2xl border border-rose-300 bg-rose-50 px-4 py-3">
             <Text className="text-sm text-rose-600">{formError}</Text>
@@ -226,20 +259,14 @@ export default function SignInScreen() {
               error={errors.org}
               returnKeyType="next"
               />
-              {/* Without this, a first-time user has no way to know what the
-                  field wants — it isn't a name they'd guess. */}
-              {!errors.org ? (
-                <Text
-                  className="ml-1 mt-1.5 text-xs text-slate-500"
-                  style={{ fontFamily: font.regular }}
-                >
-                  The workspace name in your HRMS web address — e.g. “acme” in
-                  acme.zarohr.com. Ask your HR team if you&apos;re unsure.
-                </Text>
-              ) : null}
             </View>
           ) : (
-            <View className="flex-row items-center justify-between rounded-2xl border border-slate-200 bg-white px-4 py-3">
+            <Pressable
+              onPress={editOrg}
+              className="flex-row items-center justify-between rounded-2xl border border-slate-200 bg-white px-4 py-3"
+              accessibilityRole="button"
+              accessibilityLabel="Change organization"
+            >
               <View className="min-w-0 flex-1">
                 <Text
                   className="text-xs text-slate-500"
@@ -255,49 +282,40 @@ export default function SignInScreen() {
                   {orgName ?? normalizeOrgSlug(org)}
                 </Text>
               </View>
-              <Pressable
-                onPress={editOrg}
-                hitSlop={8}
-                className="ml-3 shrink-0 flex-row items-center gap-1"
-                accessibilityRole="button"
-                accessibilityLabel="Change organization"
-              >
-                <Pencil size={15} color="#14323F" />
-                <Text
-                  className="text-sm text-ink"
-                  style={{ fontFamily: font.semibold }}
-                >
-                  Change
-                </Text>
-              </Pressable>
-            </View>
+            </Pressable>
           )}
         </StaggerItem>
 
         {/* Email — always visible. On the password step it settles into a
-            read-only summary row with an edit affordance. */}
+            read-only summary field that can be tapped to edit. */}
         <StaggerItem>
           {onPassword ? (
-            <AuthField
-              label="E-mail"
-              value={email}
-              editable={false}
-              selectTextOnFocus={false}
-              rightSlot={
-                <Pressable
-                  onPress={editEmail}
-                  hitSlop={8}
-                  className="flex-row items-center gap-1"
-                  accessibilityRole="button"
-                  accessibilityLabel="Edit email"
+            <Pressable
+              onPress={editEmail}
+              className="h-14 flex-row items-center rounded-2xl border-[1.5px] border-slate-300 bg-white px-4"
+              accessibilityRole="button"
+              accessibilityLabel="Edit email"
+            >
+              <View className="absolute -top-2.5 left-3 px-1.5" pointerEvents="none">
+                <View className="absolute inset-0 overflow-hidden rounded-[4px]">
+                  <View className="h-1/2 w-full bg-canvas" />
+                  <View className="h-1/2 w-full bg-white" />
+                </View>
+                <Text
+                  className="text-sm text-slate-500"
+                  style={{ fontFamily: font.semibold, lineHeight: 18 }}
                 >
-                  <Pencil size={15} color="#14323F" />
-                  <Text className="text-sm text-ink" style={{ fontFamily: font.semibold }}>
-                    Edit
-                  </Text>
-                </Pressable>
-              }
-            />
+                  E-mail
+                </Text>
+              </View>
+              <Text
+                className="min-w-0 flex-1 text-base text-ink"
+                numberOfLines={1}
+                style={{ fontFamily: font.regular }}
+              >
+                {email}
+              </Text>
+            </Pressable>
           ) : (
             <AuthField
               label="E-mail"
@@ -308,6 +326,10 @@ export default function SignInScreen() {
               }}
               placeholder="example@email.com"
               keyboardType="email-address"
+              // "username" rather than "email": it is the token password
+              // managers pair with current-password to store one credential.
+              autoComplete="username"
+              textContentType="username"
               autoCapitalize="none"
               autoCorrect={false}
               autoFocus={!editingOrg}
@@ -332,6 +354,8 @@ export default function SignInScreen() {
               }}
               placeholder="••••••••"
               secureTextEntry={!showPassword}
+              autoComplete="current-password"
+              textContentType="password"
               autoCapitalize="none"
               autoFocus
               editable={!loading}
@@ -409,7 +433,7 @@ export default function SignInScreen() {
                     ? 'Checking…'
                     : 'Continue'
               }
-              onPress={onPassword ? handleSignIn : () => void handleContinue()}
+              onPress={() => (submitHandle.current ?? submitStep)()}
               loading={loading || checkingOrg}
               disabled={
                 onPassword
@@ -419,6 +443,7 @@ export default function SignInScreen() {
             />
           </View>
         </StaggerItem>
+        </AuthForm>
       </View>
     </AuthShell>
   );

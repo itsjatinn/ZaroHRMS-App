@@ -1,4 +1,5 @@
-import { Alert, ScrollView, Text } from 'react-native';
+import { ScrollView, Text } from 'react-native';
+import { Alert } from '../../src/components/CrossAlert';
 import {
   SafeAreaView,
   useSafeAreaInsets,

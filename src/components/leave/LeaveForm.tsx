@@ -4,11 +4,12 @@ import DateTimePicker, {
 import { CalendarDays, FileText } from 'lucide-react-native';
 import { useRef, useState, type ReactNode } from 'react';
 import {
-  findNodeHandle,
+  ActivityIndicator,
   Pressable,
   Text,
   TextInput,
   View,
+  findNodeHandle,
 } from 'react-native';
 
 import AttachmentField from '../requests/AttachmentField';
@@ -46,6 +47,8 @@ type LeaveFormProps = {
   attempted: boolean; // user pressed Apply at least once
   daysSelected: number;
   onApply: () => void;
+  /** Disables the button and swaps in a spinner while the request is in flight. */
+  submitting?: boolean;
 };
 
 // Uppercase, letter-spaced field label with a required asterisk.
@@ -108,6 +111,7 @@ export default function LeaveForm({
   attempted,
   daysSelected,
   onApply,
+  submitting = false,
 }: LeaveFormProps) {
   const typeOptions = types.map((t) => t.short);
   const reasonRef = useRef<TextInput>(null);
@@ -243,9 +247,16 @@ export default function LeaveForm({
       <View className="mt-6">
         <Pressable
           onPress={onApply}
-          className="h-12 items-center justify-center rounded-xl bg-ink active:scale-[0.98] active:bg-ink/90"
+          disabled={submitting}
+          accessibilityRole="button"
+          accessibilityState={{ disabled: submitting, busy: submitting }}
+          className="h-12 flex-row items-center justify-center gap-2 rounded-xl bg-ink active:scale-[0.98] active:bg-ink/90"
+          style={{ opacity: submitting ? 0.75 : 1 }}
         >
-          <Text className="text-sm font-bold text-white">Apply Leave</Text>
+          {submitting ? <ActivityIndicator size="small" color="#FFFFFF" /> : null}
+          <Text className="text-sm font-bold text-white">
+            {submitting ? 'Applying…' : 'Apply Leave'}
+          </Text>
         </Pressable>
       </View>
 

@@ -1,7 +1,8 @@
 import * as ImagePicker from 'expo-image-picker';
-import { useFocusEffect } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Keyboard, ScrollView, View } from 'react-native';
+import { Keyboard, ScrollView, View } from 'react-native';
+import { Alert } from '../../src/components/CrossAlert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import BackButton from '../../src/components/BackButton';
@@ -22,7 +23,18 @@ import {
   type Duration,
   type LeaveType,
 } from '../../src/components/leave/leaveData';
-import { evaluateLeaveRequest } from '../../src/components/leave/leavePolicy';
+import {
+  dateKey,
+  evaluateLeaveRequest,
+} from '../../src/components/leave/leavePolicy';
+import RequestSuccessModal, {
+  type SuccessDetail,
+} from '../../src/components/requests/RequestSuccessModal';
+import {
+  requestErrorMessage,
+  uploadRequestAttachment,
+  useSubmitRequest,
+} from '../../src/api/submitRequest';
 
 /**
  * Accents for the balance tiles, assigned by position. The same rotation the
@@ -39,7 +51,17 @@ const TILE_ACCENTS = [
 
 const REASON_KEYBOARD_OFFSET = 85;
 
+/** "12 Aug 2026" for the confirmation summary. */
+function displayDay(value: Date) {
+  return value.toLocaleDateString('en-GB', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  });
+}
+
 export default function LeaveApplicationScreen() {
+  const router = useRouter();
   const scrollRef = useRef<ScrollView>(null);
   const reasonTargetRef = useRef<number | null>(null);
   // Bottom padding equal to the keyboard height gives the form room to scroll
@@ -95,10 +117,32 @@ export default function LeaveApplicationScreen() {
   const [leaveType, setLeaveType] = useState<LeaveType | null>(null);
   const [fromDate, setFromDate] = useState<Date | null>(null);
   const [toDate, setToDate] = useState<Date | null>(null);
+
+  // Arriving from an absent day on the attendance calendar prefills both ends
+  // of the range with that day (?date=YYYY-MM-DD), the same hand-off the
+  // Regularize screen accepts.
+  const { date: dateParam } = useLocalSearchParams<{ date?: string }>();
+  useEffect(() => {
+    const raw = Array.isArray(dateParam) ? dateParam[0] : dateParam;
+    if (!raw) return;
+    const [y, m, d] = raw.split('-').map(Number);
+    if (!y || !m || !d) return;
+    const picked = new Date(y, m - 1, d);
+    setFromDate(picked);
+    setToDate(picked);
+  }, [dateParam]);
   const [fromDuration, setFromDuration] = useState<Duration>('Full Day');
   const [toDuration, setToDuration] = useState<Duration>('Full Day');
   const [reason, setReason] = useState('');
-  const [attachment, setAttachment] = useState<{ name: string } | null>(null);
+  const [attachment, setAttachment] = useState<{
+    name: string;
+    uri: string;
+    mimeType?: string | null;
+  } | null>(null);
+  const [success, setSuccess] = useState<SuccessDetail[] | null>(null);
+  // Covers the whole round trip — the attachment upload runs before the
+  // mutation, so the mutation's own isPending would leave a dead gap.
+  const [submitting, setSubmitting] = useState(false);
   const [attempted, setAttempted] = useState(false);
 
   // Tenant-configured types, filtered to what this employee may apply for. The
@@ -106,17 +150,26 @@ export default function LeaveApplicationScreen() {
   // defaults rather than firing requests that would 401 and sign the user out.
   const { isBackendSession } = useAuth();
   const applicable = useApplicableLeaveTypes(isBackendSession);
+  const submitLeave = useSubmitRequest();
   const leaveTypes = isBackendSession ? applicable.types : LEAVE_TYPES;
 
   /**
-   * Rules for the chosen type. The app's LeaveType carries only display fields,
-   * so until the settings payload exposes per-type flags these stay at the
-   * permissive defaults: paid, no sandwich rule, no consecutive-day cap.
+   * Rules for the chosen type, as HR configured them. `sandwichRule` stays
+   * false because the employee settings payload deliberately omits it — the
+   * web can't read it either, and the server applies it authoritatively when
+   * it recomputes the day count on submit.
    */
   const selectedRules = useMemo(
     () =>
       leaveType
-        ? { paid: true, sandwichRule: false, maxConsecutiveDays: 0 }
+        ? {
+            paid: leaveType.paid !== false,
+            sandwichRule: Boolean(leaveType.sandwichRule),
+            maxConsecutiveDays: Math.max(
+              0,
+              Number(leaveType.maxConsecutiveDays ?? 0),
+            ),
+          }
         : null,
     [leaveType],
   );
@@ -202,32 +255,71 @@ export default function LeaveApplicationScreen() {
         const asset = result.assets[0];
         const name =
           asset.fileName ?? asset.uri.split('/').pop() ?? 'attachment';
-        setAttachment({ name });
+        setAttachment({ name, uri: asset.uri, mimeType: asset.mimeType });
       }
     } catch {
       Alert.alert('Could not open the file picker.');
     }
   };
 
-  const submitRequest = () => {
-    if (!leaveType) return;
-    const payload = {
-      leaveType: leaveType.key,
-      fromDate,
-      toDate,
-      fromDuration,
-      toDuration,
-      days: daysSelected,
-      paidDays: evaluation.paidDays,
-      lopDays: evaluation.lopDays,
-      reason: reason.trim(),
-      attachment: attachment?.name ?? null,
-    };
-    console.log('Leave application payload:', payload);
-    Alert.alert('Leave applied', `${daysSelected} day(s) of ${leaveType.label}.`);
+  const submitRequest = async () => {
+    if (!leaveType || !fromDate || !toDate) return;
+    if (!isBackendSession) {
+      Alert.alert(
+        'Sign in to apply',
+        'Applying for leave needs a live HRMS session.',
+      );
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      // Upload the proof first so the request carries a stored descriptor —
+      // the same two-step flow the web uses.
+      const stored = attachment
+        ? await uploadRequestAttachment(attachment)
+        : undefined;
+
+      await submitLeave.mutateAsync({
+        category: 'LEAVE',
+        type: leaveType.label,
+        leaveTypeId: leaveType.key,
+        startDate: dateKey(fromDate),
+        endDate: dateKey(toDate),
+        dayCount: daysSelected,
+        fromSession: fromDuration === 'Half Day' ? 'first-half' : 'full',
+        toSession: toDuration === 'Half Day' ? 'first-half' : 'full',
+        // Only sent once the LOP dialog has been confirmed — the server
+        // rejects over-balance requests without it.
+        ...(evaluation.lopDays > 0 ? { acceptLop: true } : {}),
+        reason: reason.trim(),
+        attachment: stored,
+      });
+
+      setSuccess([
+        { label: 'Leave type', value: leaveType.label },
+        {
+          label: 'Dates',
+          value:
+            dateKey(fromDate) === dateKey(toDate)
+              ? displayDay(fromDate)
+              : `${displayDay(fromDate)} – ${displayDay(toDate)}`,
+        },
+        { label: 'Days', value: `${daysSelected}` },
+        ...(evaluation.lopDays > 0
+          ? [{ label: 'Loss of pay', value: `${evaluation.lopDays} day(s)` }]
+          : []),
+      ]);
+    } catch (error) {
+      // The server enforces the real policy and returns a specific reason.
+      Alert.alert('Could not apply', requestErrorMessage(error));
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const applyLeave = () => {
+    if (submitting) return;
     setAttempted(true);
     if (!leaveType || !fromDate || !toDate) return;
 
@@ -245,13 +337,13 @@ export default function LeaveApplicationScreen() {
         `${evaluation.lopDays} of ${daysSelected} day(s) exceed your balance and will be treated as loss of pay.`,
         [
           { text: 'Cancel', style: 'cancel' },
-          { text: 'Apply anyway', onPress: submitRequest },
+          { text: 'Apply anyway', onPress: () => void submitRequest() },
         ],
       );
       return;
     }
 
-    submitRequest();
+    void submitRequest();
   };
 
   // Built once so the wide and stacked layouts below can order the same two
@@ -278,6 +370,7 @@ export default function LeaveApplicationScreen() {
       attempted={attempted}
       daysSelected={daysSelected}
       onApply={applyLeave}
+      submitting={submitting}
     />
   );
 
@@ -321,6 +414,17 @@ export default function LeaveApplicationScreen() {
             above, so there is no separate summary card to place. */}
         <View>{leaveDetailsForm}</View>
       </ScrollView>
+
+      <RequestSuccessModal
+        visible={success !== null}
+        title="Leave applied"
+        message="Your request was sent to your manager for approval."
+        details={success ?? []}
+        onClose={() => {
+          setSuccess(null);
+          router.back();
+        }}
+      />
     </SafeAreaView>
   );
 }

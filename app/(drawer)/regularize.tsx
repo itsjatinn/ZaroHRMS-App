@@ -2,25 +2,35 @@ import DateTimePicker, {
   type DateTimePickerEvent,
 } from '../../src/components/CrossDatePicker';
 import * as DocumentPicker from 'expo-document-picker';
-import { useFocusEffect, useLocalSearchParams } from 'expo-router';
-import { CalendarDays, Clock3 } from 'lucide-react-native';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
+import { AlertCircle, CalendarDays, Clock3 } from 'lucide-react-native';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Alert,
-  findNodeHandle,
+  ActivityIndicator,
   Keyboard,
   Pressable,
   ScrollView,
   Text,
   TextInput,
-  useWindowDimensions,
   View,
+  findNodeHandle,
+  useWindowDimensions,
 } from 'react-native';
+import { Alert } from '../../src/components/CrossAlert';
 import {
   SafeAreaView,
   useSafeAreaInsets,
 } from 'react-native-safe-area-context';
 
+import {
+  useAttendanceRules,
+  useMyMonthDays,
+} from '../../src/api/attendance';
+import {
+  useMyRegularizations,
+  useRegularizationEnabled,
+} from '../../src/api/leave';
+import { useAuth } from '../../src/auth/AuthContext';
 import BackButton from '../../src/components/BackButton';
 import Dropdown from '../../src/components/leave/Dropdown';
 import AttachmentField from '../../src/components/requests/AttachmentField';
@@ -28,7 +38,17 @@ import ReasonCounter from '../../src/components/requests/ReasonCounter';
 import {
   DEFAULT_REGULARIZE_POLICY,
   evaluateRegularization,
+  type RegularizePolicySettings,
 } from '../../src/components/requests/regularizePolicy';
+import {
+  requestErrorMessage,
+  uploadRequestAttachment,
+  useSubmitRequest,
+} from '../../src/api/submitRequest';
+import { dateKey } from '../../src/components/leave/leavePolicy';
+import RequestSuccessModal, {
+  type SuccessDetail,
+} from '../../src/components/requests/RequestSuccessModal';
 import { REASON_MAX_LENGTH } from '../../src/components/requests/requestReason';
 import { cardShadow } from '../../src/components/shadow';
 
@@ -211,6 +231,11 @@ function TimeGroup({
 }
 
 export default function Regularize() {
+  // Demo session has no bearer token, so every live read stays disabled and
+  // the permissive defaults apply.
+  const router = useRouter();
+  const { isBackendSession } = useAuth();
+  const submitRegularization = useSubmitRequest();
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const isWide = width >= 720;
@@ -238,15 +263,86 @@ export default function Regularize() {
   const [outMinute, setOutMinute] = useState<string | null>(null);
   const [outMeridiem, setOutMeridiem] = useState<string | null>(null);
   const [reason, setReason] = useState('');
-  const [attachment, setAttachment] = useState<string | null>(null);
+  const [attachment, setAttachment] = useState<{
+    name: string;
+    uri: string;
+    mimeType?: string | null;
+  } | null>(null);
+  const [success, setSuccess] = useState<SuccessDetail[] | null>(null);
+  // Covers the attachment upload as well as the POST.
+  const [submitting, setSubmitting] = useState(false);
   const [attempted, setAttempted] = useState(false);
 
   /**
-   * Tenant attendance rules. The app has no attendance-settings endpoint wired
-   * yet, so these are the permissive defaults — swapping in the real payload is
-   * a one-line change because evaluateRegularization takes them as an argument.
+   * Tenant rules. The master switch lives in the leave settings payload; the
+   * reason / attachment / monthly-cap rules live in attendance settings. The
+   * demo session has no token, so it keeps the permissive defaults.
    */
-  const policy = DEFAULT_REGULARIZE_POLICY;
+  const regularizationEnabled = useRegularizationEnabled(isBackendSession);
+  const { rules } = useAttendanceRules(isBackendSession);
+  // Memoised: a fresh object each render would re-run the evaluation memo
+  // below on every keystroke.
+  const policy: RegularizePolicySettings = useMemo(
+    () =>
+      isBackendSession
+        ? {
+            enabled: regularizationEnabled,
+            requireReason: rules.requireReason,
+            requireAttachment: rules.requireRegularizationAttachment,
+            attachmentAfterDays: rules.regularizationAttachmentAfterDays,
+            maxPerMonth: rules.maxRegularizationsPerMonth,
+          }
+        : DEFAULT_REGULARIZE_POLICY,
+    [
+      isBackendSession,
+      regularizationEnabled,
+      rules.requireReason,
+      rules.requireRegularizationAttachment,
+      rules.regularizationAttachmentAfterDays,
+      rules.maxRegularizationsPerMonth,
+    ],
+  );
+
+  // The selected day's own state: only an absent day can be regularized, and a
+  // locked payroll period freezes it.
+  const monthDays = useMyMonthDays(
+    (date ?? new Date()).getFullYear(),
+    (date ?? new Date()).getMonth() + 1,
+    isBackendSession,
+  );
+  const selectedDay = date
+    ? monthDays.data?.find((entry) => entry.day === date.getDate())
+    : undefined;
+  // Until the month loads, don't assert the day is non-absent — that would
+  // block a legitimate request on a slow network. The server re-checks.
+  const isAbsent = isBackendSession
+    ? monthDays.isPending || !date
+      ? true
+      : String(selectedDay?.status ?? '').toUpperCase() === 'ABSENT'
+    : true;
+  const isLocked = isBackendSession ? selectedDay?.locked === true : false;
+
+  // Existing regularizations drive both the duplicate check and the cap.
+  const existing = useMyRegularizations(isBackendSession);
+  const selectedIso = date ? dateKey(date) : null;
+  const isDuplicate = Boolean(
+    selectedIso &&
+      existing.data?.some((row) => row.date === selectedIso && row.blocking),
+  );
+  const usedThisMonth = useMemo(() => {
+    if (!date) return 0;
+    const year = date.getFullYear();
+    const month = date.getMonth();
+    return (existing.data ?? []).filter((row) => {
+      const raised = new Date(row.date);
+      return (
+        !Number.isNaN(raised.getTime()) &&
+        raised.getFullYear() === year &&
+        raised.getMonth() === month &&
+        row.blocking
+      );
+    }).length;
+  }, [existing.data, date]);
 
   const scrollReasonToKeyboard = useCallback((target = reasonTargetRef.current) => {
     if (!target) return;
@@ -297,7 +393,12 @@ export default function Regularize() {
       });
 
       if (!result.canceled && result.assets.length > 0) {
-        setAttachment(result.assets[0].name);
+        const asset = result.assets[0];
+        setAttachment({
+          name: asset.name,
+          uri: asset.uri,
+          mimeType: asset.mimeType,
+        });
       }
     } catch {
       Alert.alert('Could not open the file picker.');
@@ -330,19 +431,37 @@ export default function Regularize() {
         outTime,
         reason,
         hasAttachment: attachment !== null,
-        // Absent/locked/duplicate come from attendance data the app does not
-        // load yet, so they stay permissive rather than blocking wrongly. The
-        // backend still enforces all three.
-        isAbsent: true,
-        isLocked: false,
-        isDuplicate: false,
-        usedThisMonth: 0,
+        isAbsent,
+        isLocked,
+        isDuplicate,
+        usedThisMonth,
         today: new Date(),
       }),
-    [policy, requestType, date, inTime, outTime, reason, attachment],
+    [
+      policy,
+      requestType,
+      date,
+      inTime,
+      outTime,
+      reason,
+      attachment,
+      isAbsent,
+      isLocked,
+      isDuplicate,
+      usedThisMonth,
+    ],
+  );
+
+  const inlineNotices = useMemo(
+    () =>
+      evaluation.blockers.filter(
+        (blocker) => blocker !== 'Fill all required fields to submit.',
+      ),
+    [evaluation.blockers],
   );
 
   const submit = () => {
+    if (submitting) return;
     setAttempted(true);
 
     if (evaluation.blockers.length > 0) {
@@ -353,18 +472,42 @@ export default function Regularize() {
     // The "fill all required fields" blocker already covers these; this narrows
     // them for the compiler and guards against a rule being relaxed later.
     if (!requestType || !date) return;
+    if (!isBackendSession) {
+      Alert.alert(
+        'Sign in to submit',
+        'Regularization needs a live HRMS session.',
+      );
+      return;
+    }
 
-    const payload = {
-      requestType,
-      date: formatDate(date),
-      checkIn: `${inHour}:${inMinute} ${inMeridiem}`,
-      checkOut: `${outHour}:${outMinute} ${outMeridiem}`,
-      reason: reason.trim(),
-      attachment,
-    };
-
-    console.log('Regularize request payload:', payload);
-    Alert.alert('Submitted', 'Your regularization request was sent for approval.');
+    setSubmitting(true);
+    void (async () => {
+      try {
+        const stored = attachment
+          ? await uploadRequestAttachment(attachment)
+          : undefined;
+        const iso = dateKey(date);
+        await submitRegularization.mutateAsync({
+          category: 'REGULARIZATION',
+          type: requestType,
+          startDate: iso,
+          endDate: iso,
+          // The punch times ride along in the reason, as the web sends them.
+          reason: `${reason.trim()} | In: ${inTime} Out: ${outTime}`,
+          attachment: stored,
+        });
+        setSuccess([
+          { label: 'Type', value: requestType },
+          { label: 'Date', value: formatDate(date) },
+          { label: 'Check in', value: inTime },
+          { label: 'Check out', value: outTime },
+        ]);
+      } catch (error) {
+        Alert.alert('Could not submit', requestErrorMessage(error));
+      } finally {
+        setSubmitting(false);
+      }
+    })();
   };
 
   return (
@@ -463,25 +606,59 @@ export default function Regularize() {
             <ReasonCounter value={reason} />
           </View>
 
+          {inlineNotices.length ? (
+            <View className="mt-5 gap-2">
+              {inlineNotices.map((notice) => (
+                <View
+                  key={notice}
+                  className="flex-row items-start gap-2 rounded-2xl border border-red-200 bg-red-50 px-3.5 py-2.5"
+                >
+                  <AlertCircle size={15} color="#DC2626" />
+                  <Text className="flex-1 text-xs font-medium text-red-700">
+                    {notice}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          ) : null}
+
           <View className={isWide ? 'mt-6 flex-row items-end gap-5' : 'mt-6 gap-5'}>
             <View className="flex-1">
               <FieldLabel>Attachment</FieldLabel>
-              <AttachmentField fileName={attachment} onPress={pickFile} />
+              <AttachmentField fileName={attachment?.name ?? null} onPress={pickFile} />
             </View>
 
             <Pressable
               onPress={submit}
+              disabled={submitting}
+              accessibilityRole="button"
+              accessibilityState={{ disabled: submitting, busy: submitting }}
+              style={{ opacity: submitting ? 0.75 : 1 }}
               className={isWide
                 ? 'h-12 w-72 flex-row items-center justify-center gap-2 rounded-xl bg-ink active:scale-[0.98]'
                 : 'h-12 flex-row items-center justify-center gap-2 rounded-xl bg-ink active:scale-[0.98]'}
             >
+              {submitting ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : null}
               <Text className="text-sm font-bold text-white">
-                Submit Regularization
+                {submitting ? 'Submitting…' : 'Submit Regularization'}
               </Text>
             </Pressable>
           </View>
         </View>
       </ScrollView>
+
+      <RequestSuccessModal
+        visible={success !== null}
+        title="Regularization submitted"
+        message="Your request was sent to your manager for approval."
+        details={success ?? []}
+        onClose={() => {
+          setSuccess(null);
+          router.back();
+        }}
+      />
     </SafeAreaView>
   );
 }

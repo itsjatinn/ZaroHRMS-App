@@ -2,12 +2,6 @@ import { useQuery } from '@tanstack/react-query';
 
 import { api } from './client';
 
-/**
- * Remaining WFH / on-duty allowance, mirroring the web panel's work-request
- * page. Each category is capped per week or per month by HR, and the backend
- * rejects a request that would exceed it — so the tile shows what is left
- * before the employee fills the form in.
- */
 
 export type WorkRequestCategory = 'WFH' | 'OD';
 

@@ -9,7 +9,8 @@ import {
   User,
 } from 'lucide-react-native';
 import { useState } from 'react';
-import { Alert, Image, Pressable, ScrollView, Switch, Text, View } from 'react-native';
+import { Image, Pressable, ScrollView, Switch, Text, View } from 'react-native';
+import { Alert } from '../../src/components/CrossAlert';
 import {
   SafeAreaView,
   useSafeAreaInsets,

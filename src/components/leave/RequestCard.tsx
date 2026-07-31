@@ -26,6 +26,14 @@ type RequestCardProps = {
   icon: LucideIcon;
   rejectionReason?: string; // rejected cards reveal this behind a collapsible row
   onCancel?: () => void;
+  /** LEAVE | WFH | OD | REGULARIZATION — only leave says "Cancel leave". */
+  category?: string;
+  /** Why it was raised. */
+  reason?: string;
+  /** When it was submitted. */
+  appliedOn?: string;
+  /** When it was approved or rejected; absent while pending. */
+  actionDate?: string;
 };
 
 // Per-status treatment for the status pill — soft 50-tints so a mixed list
@@ -78,11 +86,20 @@ export default function RequestCard({
   icon: Icon,
   rejectionReason,
   onCancel,
+  category,
+  reason,
+  appliedOn,
+  actionDate,
 }: RequestCardProps) {
   const [reasonOpen, setReasonOpen] = useState(false);
   const s = STATUS_STYLES[status];
   const rejected = status === 'Rejected';
   const cancellable = !rejected && onCancel;
+  // A regularization or WFH request isn't leave, so don't call it that.
+  const cancelLabel =
+    String(category ?? '').toUpperCase() === 'LEAVE' || !category
+      ? 'Cancel leave'
+      : 'Cancel request';
 
   return (
     <View
@@ -112,6 +129,50 @@ export default function RequestCard({
         </View>
       </View>
 
+      {reason || appliedOn || actionDate ? (
+        <>
+          <View className="mt-3 border-t border-slate-100" />
+          <View className="mt-3 gap-2">
+            {reason ? (
+              <View className="flex-row gap-2">
+                <Text className="w-20 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                  Reason
+                </Text>
+                <Text className="flex-1 text-xs text-ink" numberOfLines={3}>
+                  {reason}
+                </Text>
+              </View>
+            ) : null}
+            {appliedOn || actionDate ? (
+              <View className="flex-row gap-3">
+                {appliedOn ? (
+                  <View className="flex-1 flex-row gap-2">
+                    <Text className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                      Applied
+                    </Text>
+                    <Text className="text-xs font-medium text-ink">
+                      {appliedOn}
+                    </Text>
+                  </View>
+                ) : null}
+                {/* Only once a decision exists — a dash on every pending
+                    request was noise, not information. */}
+                {actionDate ? (
+                  <View className="flex-1 flex-row gap-2">
+                    <Text className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                      Actioned
+                    </Text>
+                    <Text className="text-xs font-medium text-ink">
+                      {actionDate}
+                    </Text>
+                  </View>
+                ) : null}
+              </View>
+            ) : null}
+          </View>
+        </>
+      ) : null}
+
       {cancellable ? (
         <>
           <View className="mt-3 border-t border-slate-100" />
@@ -123,7 +184,7 @@ export default function RequestCard({
             >
               <X size={14} color="#EF4444" strokeWidth={2.5} />
               <Text className="text-[13px] font-bold text-red-500">
-                Cancel leave
+                {cancelLabel}
               </Text>
             </Pressable>
           </View>

@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useMemo } from 'react';
 
 import type { LeaveType } from '../components/leave/leaveData';
@@ -25,6 +25,10 @@ export type ApiLeaveType = {
   applicableGender?: Gender;
   /** Hides the BALANCE CARD only — see the filter note below. */
   visibleToEmployees?: boolean;
+  /** Unpaid types are loss of pay by definition and never produce LOP days. */
+  paid?: boolean;
+  /** 0 or absent = no cap on a single stretch. */
+  maxConsecutiveDays?: number;
 };
 
 export type LeaveBalanceRow = {
@@ -40,6 +44,10 @@ export type LeaveBalanceRow = {
 type RequestSettings = {
   leaveTypes?: ApiLeaveType[];
   calendar?: {
+    /** Attendance settings → Rules master switch for regularization. */
+    regularizationEnabled?: boolean;
+    workFromHomeEnabled?: boolean;
+    onDutyEnabled?: boolean;
     excludeWeekends?: boolean;
     excludeHolidays?: boolean;
     halfDayAllowed?: boolean;
@@ -55,6 +63,11 @@ type RequestSettings = {
     requireAttachmentAfterDays?: number;
     restrictPastApplication?: boolean;
     pastApplicationDays?: number;
+    /** Per-category attachment rules for WFH / On Duty. */
+    requireWfhAttachment?: boolean;
+    wfhAttachmentAfterDays?: number;
+    requireOdAttachment?: boolean;
+    odAttachmentAfterDays?: number;
   };
 };
 
@@ -74,16 +87,37 @@ export function useLeaveSettings(enabled = true) {
   });
 }
 
+/**
+ * Statuses that still hold their dates. A rejected or cancelled request has
+ * released them, so it must not block re-applying — the web filters the same
+ * three.
+ */
+const BLOCKING_STATUSES = new Set([
+  'PENDING',
+  'APPROVED',
+  'CANCELLATION_REQUESTED',
+]);
+
 /** Existing leave requests, used to block overlapping dates. */
 export function useMyLeaveRequests(enabled = true) {
   return useQuery({
     queryKey: leaveKeys.myLeave(),
     queryFn: async ({ signal }) => {
-      const rows = await api.get<ExistingLeaveRange[]>(
-        '/requests/mine?category=LEAVE',
-        { signal },
-      );
-      return Array.isArray(rows) ? rows : [];
+      const rows = await api.get<
+        (ExistingLeaveRange & { status?: string })[]
+      >('/requests/mine?category=LEAVE', { signal });
+      if (!Array.isArray(rows)) return [] as ExistingLeaveRange[];
+      return rows
+        .filter((row) =>
+          BLOCKING_STATUSES.has(String(row.status ?? '').toUpperCase()),
+        )
+        .map((row) => ({
+          id: row.id,
+          type: row.type,
+          startDate: String(row.startDate ?? '').slice(0, 10),
+          endDate: String(row.endDate ?? row.startDate ?? '').slice(0, 10),
+        }))
+        .filter((row) => row.id && row.startDate && row.endDate);
     },
     staleTime: 60_000,
     enabled,
@@ -95,6 +129,16 @@ export function useMyLeaveRequests(enabled = true) {
  * defaults filling any gap. Every field is optional on the wire, and a missing
  * flag must not silently flip a rule — so each falls back to DEFAULT_LEAVE_POLICY.
  */
+/**
+ * Regularization master switch (Attendance settings → Rules), read from the
+ * same settings payload — and the same cache entry — the web widget uses.
+ * Absent means on: only an explicit false disables it.
+ */
+export function useRegularizationEnabled(enabled = true): boolean {
+  const settings = useLeaveSettings(enabled);
+  return settings.data?.calendar?.regularizationEnabled !== false;
+}
+
 export function useLeavePolicySettings(enabled = true): LeavePolicySettings {
   const settings = useLeaveSettings(enabled);
 
@@ -218,6 +262,16 @@ export function useApplicableLeaveTypes(enabled = true) {
           // would invent labels HR never wrote.
           short: name,
           remaining: Math.max(0, Number(balance?.available ?? 0)),
+          // Only an explicit false makes a type unpaid.
+          paid: row.paid !== false,
+          maxConsecutiveDays: Math.max(0, Number(row.maxConsecutiveDays ?? 0)),
+          /**
+           * The employee settings payload deliberately omits `sandwichRule`
+           * (see getEmployeeSettings) — the web can't read it either, so
+           * neither product applies it client-side. The server applies it
+           * authoritatively when it recomputes the day count on submit.
+           */
+          sandwichRule: false,
         };
       });
   }, [settings.data, summary.data]);
@@ -227,4 +281,160 @@ export function useApplicableLeaveTypes(enabled = true) {
     isPending: settings.isPending || summary.isPending,
     isError: settings.isError || summary.isError,
   };
+}
+
+/**
+ * HR toggles and attachment rules for WFH / On Duty requests, from the same
+ * leave-settings payload the web's work-request page reads.
+ *
+ * Each flag defaults to permissive while settings load: only an explicit
+ * `false` disables a category, and the attachment requirement needs an
+ * explicit `true`. The server enforces all of it regardless.
+ */
+export type WorkRequestPolicy = {
+  wfhEnabled: boolean;
+  odEnabled: boolean;
+  requireReason: boolean;
+  attachment: Record<'WFH' | 'OD', { required: boolean; afterDays: number }>;
+};
+
+export const DEFAULT_WORK_REQUEST_POLICY: WorkRequestPolicy = {
+  wfhEnabled: true,
+  odEnabled: true,
+  requireReason: true,
+  attachment: {
+    WFH: { required: false, afterDays: 0 },
+    OD: { required: false, afterDays: 0 },
+  },
+};
+
+export function useWorkRequestPolicy(enabled = true): WorkRequestPolicy {
+  const { data } = useLeaveSettings(enabled);
+  return useMemo(() => {
+    if (!data) return DEFAULT_WORK_REQUEST_POLICY;
+    const calendar = data.calendar ?? {};
+    const workflow = data.workflow ?? {};
+    return {
+      wfhEnabled: calendar.workFromHomeEnabled !== false,
+      odEnabled: calendar.onDutyEnabled !== false,
+      requireReason: workflow.requireReason !== false,
+      attachment: {
+        WFH: {
+          required: workflow.requireWfhAttachment === true,
+          afterDays: Math.max(0, Number(workflow.wfhAttachmentAfterDays ?? 0)),
+        },
+        OD: {
+          required: workflow.requireOdAttachment === true,
+          afterDays: Math.max(0, Number(workflow.odAttachmentAfterDays ?? 0)),
+        },
+      },
+    };
+  }, [data]);
+}
+
+/**
+ * Is an attachment mandatory for this request? The master toggle must be on,
+ * and either it always applies (0 days) or the request runs longer than the
+ * threshold — the same shape as the leave rule.
+ */
+export function isWorkAttachmentRequired(
+  policy: WorkRequestPolicy,
+  category: 'WFH' | 'OD',
+  days: number,
+): boolean {
+  const rule = policy.attachment[category];
+  if (!rule.required) return false;
+  if (rule.afterDays <= 0) return true;
+  return days > rule.afterDays;
+}
+
+/**
+ * The employee's regularization requests, reduced to what the apply screen
+ * needs: the date each one covers and whether it still holds that date.
+ *
+ * Rejected and cancelled requests release the day, so they neither block a
+ * duplicate nor count toward the monthly cap.
+ */
+export type MyRegularization = {
+  id: string;
+  /** yyyy-mm-dd of the day being regularized. */
+  date: string;
+  /** Pending or approved — still holds the day. */
+  blocking: boolean;
+};
+
+export function useMyRegularizations(enabled = true) {
+  return useQuery({
+    queryKey: ['leave', 'mine', 'regularizations'] as const,
+    queryFn: async ({ signal }) => {
+      const rows = await api.get<
+        { id: string; startDate?: string; status?: string }[]
+      >('/requests/mine?category=REGULARIZATION', { signal });
+      if (!Array.isArray(rows)) return [] as MyRegularization[];
+      return rows
+        .map((row) => {
+          const status = String(row.status ?? '').toUpperCase();
+          return {
+            id: row.id,
+            date: String(row.startDate ?? '').slice(0, 10),
+            blocking: status === 'PENDING' || status === 'APPROVED',
+          };
+        })
+        .filter((row) => row.id && row.date);
+    },
+    staleTime: 60_000,
+    enabled,
+  });
+}
+
+/** One leave request as the requests feed returns it. */
+export type MyLeaveRequest = {
+  id: string;
+  category?: string;
+  /**
+   * The server's own label: the leave type's name, or the humanized category
+   * ("Regularization", "Work From Home", "On Duty") when there is no leave
+   * type. Reconstructing this client-side is what labelled every
+   * regularization as "Leave".
+   */
+  type?: string;
+  status?: string;
+  startDate?: string;
+  endDate?: string;
+  dayCount?: number;
+  reason?: string;
+  /** Reason with the attachment metadata stripped — what the web displays. */
+  displayReason?: string;
+  /** ISO timestamp of the decision (approval/rejection); null while pending. */
+  actionedAt?: string | null;
+  leaveType?: { name?: string; code?: string } | null;
+  decisionNote?: string | null;
+  createdAt?: string;
+};
+
+/** Every request this employee has raised, newest first. */
+export function useMyRequests(enabled = true) {
+  return useQuery({
+    queryKey: ['leave', 'mine', 'all-requests'],
+    queryFn: async ({ signal }) => {
+      const rows = await api.get<MyLeaveRequest[]>('/requests/mine', { signal });
+      return Array.isArray(rows) ? rows : [];
+    },
+    staleTime: 60_000,
+    enabled,
+  });
+}
+
+/** Withdraw / cancel one of the employee's own requests. */
+export function useCancelMyRequest() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { id: string; reason: string }) =>
+      api.patch(`/requests/${input.id}/cancellation`, {
+        reason: input.reason,
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['leave'] });
+    },
+  });
 }

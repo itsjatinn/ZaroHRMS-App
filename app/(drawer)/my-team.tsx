@@ -4,12 +4,13 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { findNodeHandle, Keyboard, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { useAuth } from '../../../src/auth/AuthContext';
-import BackButton from '../../../src/components/BackButton';
-import { cardShadow } from '../../../src/components/shadow';
-import AttendanceCalendar from '../../../src/components/team/AttendanceCalendar';
-import LeaveCalendar from '../../../src/components/team/LeaveCalendar';
-import { STATUS_STYLE, TEAM, type TeamMember, type TeamStatus } from '../../../src/components/team/teamData';
+import { useIsManager, useTeamMembers } from '../../src/api/team';
+import { useAuth } from '../../src/auth/AuthContext';
+import BackButton from '../../src/components/BackButton';
+import { cardShadow } from '../../src/components/shadow';
+import AttendanceCalendar from '../../src/components/team/AttendanceCalendar';
+import LeaveCalendar from '../../src/components/team/LeaveCalendar';
+import { STATUS_STYLE, TEAM, type TeamMember, type TeamStatus } from '../../src/components/team/teamData';
 
 type TeamView = 'roster' | 'attendance' | 'leave';
 
@@ -112,7 +113,15 @@ function ViewSwitcher({ view, onChange }: { view: TeamView; onChange: (view: Tea
 }
 
 export default function MyTeamScreen() {
-  const { userRole } = useAuth();
+  const { isBackendSession } = useAuth();
+  const managerAccess = useIsManager();
+  // Live roster for a real session; the demo keeps the sample team. While the
+  // roster loads, an empty list beats showing six fabricated employees.
+  const teamQuery = useTeamMembers(isBackendSession && managerAccess.isManager);
+  const roster = useMemo(
+    () => (isBackendSession ? (teamQuery.data ?? []) : TEAM),
+    [isBackendSession, teamQuery.data],
+  );
   const insets = useSafeAreaInsets();
   const [view, setView] = useState<TeamView>('roster');
   const [query, setQuery] = useState('');
@@ -158,19 +167,23 @@ export default function MyTeamScreen() {
 
   // Search + status filter apply to every view, so the calendars stay in step
   // with whatever slice of the team the manager is looking at.
-  const filteredTeam = useMemo(() => TEAM.filter((member) => {
+  const filteredTeam = useMemo(() => roster.filter((member) => {
     const search = query.trim().toLowerCase();
     const matchesSearch = !search || `${member.name} ${member.role} ${member.employeeId}`.toLowerCase().includes(search);
     return matchesSearch && (status === 'All' || member.status === status);
-  }), [query, status]);
+  }), [roster, query, status]);
 
   const counts = useMemo(() => ({
-    present: TEAM.filter((member) => member.status === 'Present').length,
-    remote: TEAM.filter((member) => member.status === 'WFH/WO').length,
-    leave: TEAM.filter((member) => member.status === 'On leave').length,
-  }), []);
+    present: roster.filter((member) => member.status === 'Present').length,
+    remote: roster.filter((member) => member.status === 'WFH/WO').length,
+    leave: roster.filter((member) => member.status === 'On leave').length,
+  }), [roster]);
 
-  if (userRole !== 'manager') return <Redirect href="/" />;
+  // Only bounce once the server has answered — redirecting while the
+  // is-manager check is in flight would eject a real manager.
+  if (managerAccess.ready && !managerAccess.isManager) {
+    return <Redirect href="/" />;
+  }
 
   return (
     <SafeAreaView edges={['top', 'left', 'right']} className="flex-1 bg-canvas">
@@ -220,7 +233,7 @@ export default function MyTeamScreen() {
           {view === 'roster' ? (
             <>
               <View className="flex-row flex-wrap justify-between gap-y-2">
-                <SummaryCard icon={<Feather name="users" size={18} color="#6258B2" />} label="Team size" value={TEAM.length} subtitle="direct reports" color="#6258B2" background="#F0EEFA" />
+                <SummaryCard icon={<Feather name="users" size={18} color="#6258B2" />} label="Team size" value={roster.length} subtitle="direct reports" color="#6258B2" background="#F0EEFA" />
                 <SummaryCard icon={<Feather name="user-check" size={18} color="#3D8762" />} label="Present" value={counts.present} subtitle="in office today" color="#3D8762" background="#EAF4EE" />
                 <SummaryCard icon={<MaterialCommunityIcons name="home-outline" size={20} color="#6258B2" />} label="WFH / WO" value={counts.remote} subtitle="remote today" color="#6258B2" background="#F0EEFA" />
                 <SummaryCard icon={<MaterialCommunityIcons name="airplane" size={19} color="#B17B18" />} label="On leave" value={counts.leave} subtitle="out of office" color="#B17B18" background="#FFF5DF" />
@@ -228,7 +241,7 @@ export default function MyTeamScreen() {
 
               <View className="flex-row items-center justify-between">
                 <Text className="text-lg font-bold text-ink">My direct reports</Text>
-                <Text className="text-xs text-slate-400">{filteredTeam.length} of {TEAM.length}</Text>
+                <Text className="text-xs text-slate-400">{filteredTeam.length} of {roster.length}</Text>
               </View>
               <View className="gap-3">
                 {filteredTeam.map((member) => <TeamMemberCard key={member.employeeId} member={member} />)}

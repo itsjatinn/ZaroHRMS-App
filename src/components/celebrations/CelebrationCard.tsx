@@ -6,7 +6,8 @@ import {
   PartyPopper,
   Send,
 } from 'lucide-react-native';
-import { Pressable, Text, View, type ViewStyle } from 'react-native';
+import { useState } from 'react';
+import { Image, Pressable, Text, View, type ViewStyle } from 'react-native';
 
 import { cardShadow } from '../shadow';
 import {
@@ -57,7 +58,6 @@ type Props = {
   highlight?: boolean;
   /** A wish has already gone out — the action button locks into a sent state. */
   wished?: boolean;
-  onPressPerson?: (employeeId: string) => void;
   onPressAction?: (celebration: Celebration) => void;
 };
 
@@ -65,11 +65,13 @@ export default function CelebrationCard({
   celebration,
   highlight = false,
   wished = false,
-  onPressPerson,
   onPressAction,
 }: Props) {
   const meta = KIND_META[celebration.kind];
   const canWish = isWishOpen(celebration);
+  // A broken photo URL falls back to initials instead of an empty circle.
+  const [photoFailed, setPhotoFailed] = useState(false);
+  const photo = !photoFailed ? celebration.profilePhoto : null;
 
   return (
     <View
@@ -81,27 +83,35 @@ export default function CelebrationCard({
         highlight ? { borderColor: meta.color + '59' } : null,
       ]}
     >
-      <Pressable
-        onPress={() => onPressPerson?.(celebration.employeeId)}
-        accessibilityRole="button"
-        accessibilityLabel={`Open ${celebration.name}'s profile`}
-        className="min-w-0 flex-1 flex-row items-center gap-2.5 active:opacity-70"
-      >
+      {/* Read-only, as on the web — the wish button is the card's only action. */}
+      <View className="min-w-0 flex-1 flex-row items-center gap-2.5">
         {/* Round initials avatar with the kind icon chipped into the corner */}
         <View className="h-11 w-11">
-          <View
-            className="h-11 w-11 items-center justify-center rounded-full"
-            style={{
-              backgroundColor: avatarColorForEmployee(
-                celebration.employeeId,
-                celebration.avatarBg,
-              ),
-            }}
-          >
-            <Text className="text-sm font-bold text-white">
-              {initialsFor(celebration.name)}
-            </Text>
-          </View>
+          {photo ? (
+            // The server photo when there is one, as on the web; the coloured
+            // initials circle stays the fallback.
+            <Image
+              source={{ uri: photo }}
+              onError={() => setPhotoFailed(true)}
+              accessibilityIgnoresInvertColors
+              className="h-11 w-11 rounded-full"
+              style={{ backgroundColor: brandAlpha(0.08) }}
+            />
+          ) : (
+            <View
+              className="h-11 w-11 items-center justify-center rounded-full"
+              style={{
+                backgroundColor: avatarColorForEmployee(
+                  celebration.employeeId,
+                  celebration.avatarBg,
+                ),
+              }}
+            >
+              <Text className="text-sm font-bold text-white">
+                {initialsFor(celebration.name)}
+              </Text>
+            </View>
+          )}
           <View
             className="absolute -bottom-[5px] -right-[5px] h-6 w-6 items-center justify-center rounded-full bg-white"
             style={chipShadow}
@@ -141,7 +151,7 @@ export default function CelebrationCard({
             </Text>
           </View>
         </View>
-      </Pressable>
+      </View>
 
       <Pressable
         onPress={() => onPressAction?.(celebration)}

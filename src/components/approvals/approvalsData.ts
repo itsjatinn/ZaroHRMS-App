@@ -1,4 +1,10 @@
-export type ApprovalType = 'Leave' | 'Regularize' | 'Comp-off' | 'Optional holiday';
+export type ApprovalType =
+  | 'Leave'
+  | 'Regularize'
+  | 'Comp-off'
+  | 'Optional holiday'
+  | 'WFH / On duty'
+  | 'Other';
 export type ApprovalStatus = 'Pending' | 'Approved' | 'Rejected';
 
 // A colleague already off (or asking to be off) during the same window as the
@@ -146,7 +152,14 @@ export const INITIAL_APPROVALS: Approval[] = [
   },
 ];
 
-export const TYPE_FILTERS = ['All types', 'Leave', 'Regularize', 'Comp-off', 'Optional holiday'] as const;
+export const TYPE_FILTERS = [
+  'All types',
+  'Leave',
+  'Regularize',
+  'Comp-off',
+  'Optional holiday',
+  'WFH / On duty',
+] as const;
 export const STATUS_FILTERS = ['Pending', 'Approved', 'Rejected', 'All'] as const;
 
 export const TYPE_STYLE: Record<ApprovalType, { color: string; background: string; icon: string }> = {
@@ -154,6 +167,8 @@ export const TYPE_STYLE: Record<ApprovalType, { color: string; background: strin
   Regularize: { color: '#645CB5', background: '#EFEEFC', icon: 'edit-3' },
   'Comp-off': { color: '#2970A8', background: '#E9F3FA', icon: 'refresh-cw' },
   'Optional holiday': { color: '#2F7D5B', background: '#E8F5EF', icon: 'sun' },
+  'WFH / On duty': { color: '#0E7DB3', background: '#D7EEFB', icon: 'home' },
+  Other: { color: '#475467', background: '#EDF0F3', icon: 'file-text' },
 };
 
 export const STATUS_STYLE: Record<ApprovalStatus, { bg: string; text: string }> = {
@@ -191,3 +206,91 @@ export const DELEGATION_STATE_STYLE: Record<Delegation['state'], { bg: string; t
   Scheduled: { bg: '#E9F3FA', text: '#2970A8' },
   Revoked: { bg: '#FDEBEC', text: '#B74853' },
 };
+
+// ---- Live-queue adapter ----------------------------------------------------
+
+import type { ServerApprovalKind, ServerApprovalRow } from '../../api/approvals';
+
+const KIND_TO_TYPE: Record<string, ApprovalType> = {
+  leave: 'Leave',
+  cancellation: 'Leave',
+  regularize: 'Regularize',
+  compoff: 'Comp-off',
+  optholiday: 'Optional holiday',
+  wfh: 'WFH / On duty',
+  od: 'WFH / On duty',
+};
+
+const KIND_TITLE: Partial<Record<string, string>> = {
+  cancellation: 'Leave cancellation',
+  optholiday: 'Optional holiday claim',
+  overtime: 'Overtime',
+  shiftswap: 'Shift swap',
+};
+
+function relativeLabel(iso?: string): string {
+  if (!iso) return '';
+  const ms = Date.now() - new Date(iso).getTime();
+  const minutes = Math.round(ms / 60000);
+  if (minutes < 1) return 'Just now';
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return `${Math.round(hours / 24)}d ago`;
+}
+
+function metaValue(row: ServerApprovalRow, label: string): string | undefined {
+  return row.meta?.find(
+    (chip) => chip.label.trim().toLowerCase() === label,
+  )?.value;
+}
+
+function initialsOf(name: string): string {
+  const parts = name.trim().split(/\s+/);
+  const first = parts[0]?.[0] ?? '?';
+  const last = parts.length > 1 ? parts[parts.length - 1][0] : '';
+  return (first + last).toUpperCase();
+}
+
+/**
+ * Maps one server queue row onto the card model this screen renders. Dates and
+ * day counts travel in the row's generic meta chips, so they are best-effort:
+ * a kind without them falls back to em dashes rather than inventing values.
+ */
+export function toApproval(
+  row: ServerApprovalRow,
+  status: ApprovalStatus,
+): Approval & { serverRow: ServerApprovalRow } {
+  const kind = String(row.kind ?? '') as ServerApprovalKind;
+  const name = row.requester?.name?.trim() || 'Employee';
+  const roleBits = [row.requester?.designation, row.requester?.team].filter(
+    Boolean,
+  );
+  const days = Number(metaValue(row, 'days') ?? metaValue(row, 'day count'));
+
+  return {
+    id: row.id,
+    employee: name,
+    initials: initialsOf(name),
+    role: roleBits.join(' · '),
+    employeeId: row.requester?.id ?? '',
+    type: KIND_TO_TYPE[kind] ?? 'Other',
+    title: KIND_TITLE[kind] ?? row.summary ?? 'Request',
+    from: metaValue(row, 'from') ?? metaValue(row, 'date') ?? '—',
+    to: metaValue(row, 'to') ?? metaValue(row, 'date') ?? '—',
+    days: Number.isFinite(days) ? days : 0,
+    submitted: relativeLabel(row.raisedAt),
+    reason: row.details || row.summary || '',
+    stage: row.autoApproved ? 'Auto-approved' : 'Manager approval',
+    stageNote: row.autoApproved
+      ? 'Approved automatically by policy.'
+      : row.decisionNote
+        ? `Note: ${row.decisionNote}`
+        : 'Your decision completes this request.',
+    status,
+    // Cross-team overlap needs GET /requests/:id/team-overlap per row — not
+    // fetched yet, so the coverage panel stays empty on live data.
+    overlaps: [],
+    serverRow: row,
+  };
+}

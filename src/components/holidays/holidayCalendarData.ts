@@ -44,7 +44,7 @@ export const WEEK_OFF_COLOR = '#94A3B8';
 
 export const CLAIM_META: Record<ClaimStatus, { label: string; color: string }> = {
   open: { label: 'Claim open', color: '#7C5CC6' },
-  approved: { label: 'Approved leave', color: APPROVED_COLOR },
+  approved: { label: 'Claim approved', color: APPROVED_COLOR },
   pending: { label: 'Awaiting approval', color: PENDING_COLOR },
   closed: { label: 'Claim closed', color: '#94A3B8' },
 };
@@ -180,7 +180,7 @@ export function claimActionFor(
     return { label: 'Claim closed', action: null, tone: 'muted' };
   }
   if (holiday.claim === 'approved') {
-    return { label: 'Cancel approved leave', action: 'cancel', tone: 'ghost' };
+    return { label: 'Cancel holiday claim', action: 'cancel', tone: 'ghost' };
   }
   if (holiday.claim === 'pending') {
     return { label: 'Withdraw request', action: 'withdraw', tone: 'ghost' };
@@ -200,6 +200,6 @@ export function claimStatusHint(
     return 'This date has passed, so it can no longer be claimed.';
   }
   if (holiday.claim === 'pending') return 'Your claim is waiting for approval.';
-  if (holiday.claim === 'approved') return 'Your optional leave is approved.';
+  if (holiday.claim === 'approved') return 'Your holiday claim is approved.';
   return 'Available to claim.';
 }

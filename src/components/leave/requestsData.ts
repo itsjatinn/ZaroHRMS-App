@@ -11,7 +11,15 @@ import type { RequestStatus } from './RequestCard';
 
 export type Request = {
   id: string;
+  /** LEAVE | WFH | OD | REGULARIZATION — drives the cancel wording. */
+  category?: string;
   type: string;
+  /** Why it was raised. Blank when none was given. */
+  reason?: string;
+  /** "31 Jul 2026" — when it was submitted. */
+  appliedOn?: string;
+  /** "31 Jul 2026" — when it was approved or rejected; blank while pending. */
+  actionDate?: string;
   dates: string;
   days: string;
   month: string; // section header on the "All requests" screen, e.g. "August 2026"
@@ -108,3 +116,100 @@ export const REQUESTS: Request[] = [
     icon: Activity,
   },
 ];
+
+// ---- Live-feed adapter -----------------------------------------------------
+
+import type { MyLeaveRequest } from '../../api/leave';
+
+/** Backend status → the card's status vocabulary. */
+const STATUS_MAP: Record<string, RequestStatus> = {
+  PENDING: 'Pending',
+  APPROVED: 'Approved',
+  REJECTED: 'Rejected',
+  CANCELLED: 'Cancelled',
+  CANCELLATION_REQUESTED: 'Cancellation requested',
+  CANCELLATION_REJECTED: 'Cancellation rejected',
+};
+
+const MONTHS_LONG = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+];
+const MONTHS_SHORT = [
+  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+];
+
+/** Icon by category — leave types are tenant-defined, so keep this coarse. */
+function iconFor(request: MyLeaveRequest): LucideIcon {
+  const category = String(request.category ?? '').toUpperCase();
+  if (category === 'WFH' || category === 'OD') return Plane;
+  if (category === 'REGULARIZATION') return CalendarDays;
+  const code = String(request.leaveType?.code ?? '').toUpperCase();
+  if (code.includes('SICK')) return Activity;
+  if (code.includes('MAT') || code.includes('PAT')) return Baby;
+  return Sun;
+}
+
+/** "12 – 14 Aug 2026", or a single date when the range is one day. */
+function dateRange(startIso?: string, endIso?: string): string {
+  const start = startIso ? new Date(startIso) : null;
+  const end = endIso ? new Date(endIso) : null;
+  if (!start || Number.isNaN(start.getTime())) return '—';
+  const startLabel = `${start.getDate()} ${MONTHS_SHORT[start.getMonth()]}`;
+  if (!end || Number.isNaN(end.getTime()) || start.getTime() === end.getTime()) {
+    return `${startLabel} ${start.getFullYear()}`;
+  }
+  return `${startLabel} – ${end.getDate()} ${MONTHS_SHORT[end.getMonth()]} ${end.getFullYear()}`;
+}
+
+/** "31 Jul 2026", or undefined when there is no usable date. */
+function shortDate(value?: string | null): string | undefined {
+  if (!value) return undefined;
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return undefined;
+  return `${d.getDate()} ${MONTHS_SHORT[d.getMonth()]} ${d.getFullYear()}`;
+}
+
+/** Maps one server request onto the feed card's model. */
+export function toRequest(row: MyLeaveRequest): Request {
+  const start = row.startDate ? new Date(row.startDate) : null;
+  const days = Number(row.dayCount ?? 0);
+  const status =
+    STATUS_MAP[String(row.status ?? '').toUpperCase()] ?? 'Pending';
+
+  const category = String(row.category ?? '').toUpperCase();
+
+  return {
+    id: row.id,
+    category,
+    // The server already resolves this (leave type name, else the humanized
+    // category), so take it as given. The fallbacks below only cover an older
+    // payload that predates the field — the previous code had no
+    // REGULARIZATION branch at all and defaulted everything to "Leave".
+    type:
+      row.type?.trim() ||
+      row.leaveType?.name ||
+      (category === 'WFH'
+        ? 'Work From Home'
+        : category === 'OD'
+          ? 'On Duty'
+          : category === 'REGULARIZATION'
+            ? 'Regularization'
+            : 'Leave'),
+    dates: dateRange(row.startDate, row.endDate),
+    days: `${days % 1 === 0 ? days : days.toFixed(1)} day${days === 1 ? '' : 's'}`,
+    month:
+      start && !Number.isNaN(start.getTime())
+        ? `${MONTHS_LONG[start.getMonth()]} ${start.getFullYear()}`
+        : 'Earlier',
+    status,
+    icon: iconFor(row),
+    // displayReason has the attachment metadata stripped; the raw reason is
+    // the fallback, as on the web.
+    reason: (row.displayReason ?? row.reason ?? '').trim() || undefined,
+    appliedOn: shortDate(row.createdAt),
+    actionDate: shortDate(row.actionedAt),
+    rejectionReason: row.decisionNote ?? undefined,
+  };
+}

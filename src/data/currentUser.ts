@@ -4,5 +4,6 @@
 export const currentUser = {
   name: 'Vishal Verma',
   employeeId: 'PHL-2024-089',
+  designation: 'Senior Software Engineer',
   avatar: 'https://i.pravatar.cc/200?img=12',
 };

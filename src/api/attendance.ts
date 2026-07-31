@@ -20,6 +20,18 @@ export type AttendanceStatus =
   | 'ON_DUTY'
   | (string & {});
 
+/** The shift attached to today's entry — drives the punch-out projection. */
+export type ShiftSummary = {
+  name?: string | null;
+  startTime?: string | null;
+  endTime?: string | null;
+  /** Shift crosses midnight (punch-out lands on the next calendar day). */
+  isNightShift?: boolean;
+  /** Hours needed for a half day / full day. */
+  halfDayHrs?: number | null;
+  fullDayHrs?: number | null;
+};
+
 export type AttendanceDay = {
   id?: string;
   /** ISO date-time of the entry's business date. */
@@ -31,7 +43,131 @@ export type AttendanceDay = {
   overtimeHours?: number | null;
   lateMinutes?: number | null;
   earlyExitMinutes?: number | null;
+  shift?: ShiftSummary | null;
+  /** The entry's business date. For a night shift still open past midnight
+   *  this is YESTERDAY's date. */
+  businessDate?: string | null;
+  /** True when the entry is yesterday's still-open night shift. */
+  overnightOpen?: boolean;
 } | null;
+
+/**
+ * Which punch methods the tenant allows. Defaults keep web punch enabled while
+ * the settings load and if the read fails, so a config blip can't lock people
+ * out of punching — the server is the real gate either way.
+ */
+export type CaptureConfig = {
+  /** Governs the mobile app. The web widget reads `webPunch` instead. */
+  mobilePunch: boolean;
+  webPunch: boolean;
+  geoFencing: boolean;
+  requireLiveLocation: boolean;
+};
+
+export function useAttendanceCapture(enabled = true) {
+  const query = useQuery({
+    queryKey: ['attendance', 'settings'] as const,
+    queryFn: ({ signal }) =>
+      api.get<{
+        capture?: {
+          mobilePunch?: boolean;
+          webPunch?: boolean;
+          geoFencing?: boolean;
+          geoFencingConfig?: { requireLiveLocation?: boolean };
+        };
+      }>('/attendance/settings', { signal }),
+    staleTime: 5 * 60_000,
+    enabled,
+  });
+  const capture: CaptureConfig = query.data
+    ? {
+        mobilePunch: query.data.capture?.mobilePunch !== false,
+        webPunch: query.data.capture?.webPunch !== false,
+        geoFencing: Boolean(query.data.capture?.geoFencing),
+        requireLiveLocation: Boolean(
+          query.data.capture?.geoFencingConfig?.requireLiveLocation,
+        ),
+      }
+    : {
+        mobilePunch: true,
+        webPunch: true,
+        geoFencing: false,
+        requireLiveLocation: false,
+      };
+  // Until the settings resolve, `ready` is false so the card can hold off
+  // rather than flashing in and then disappearing when mobile punch is off.
+  return { ...query, capture, ready: !enabled || query.isFetched };
+}
+
+/**
+ * Tenant attendance rules that bear on regularizing, read from the same
+ * settings payload — and the same cache entry — the punch card uses.
+ *
+ * Absent flags mean "on" for requireReason and "off" for the attachment
+ * requirement, matching the web's `!== false` / `=== true` reads.
+ */
+export type AttendanceRules = {
+  requireReason: boolean;
+  requireRegularizationAttachment: boolean;
+  regularizationAttachmentAfterDays: number;
+  maxRegularizationsPerMonth: number;
+  autoAbsentIfNoPunch: boolean;
+};
+
+export function useAttendanceRules(enabled = true) {
+  const query = useQuery({
+    queryKey: ['attendance', 'settings'] as const,
+    queryFn: ({ signal }) =>
+      api.get<{ rules?: Partial<Record<keyof AttendanceRules, unknown>> }>(
+        '/attendance/settings',
+        { signal },
+      ),
+    staleTime: 5 * 60_000,
+    enabled,
+  });
+  const raw = (query.data as { rules?: Record<string, unknown> } | undefined)
+    ?.rules;
+  const rules: AttendanceRules = {
+    requireReason: raw?.requireReason !== false,
+    requireRegularizationAttachment:
+      raw?.requireRegularizationAttachment === true,
+    regularizationAttachmentAfterDays: Math.max(
+      0,
+      Number(raw?.regularizationAttachmentAfterDays ?? 0),
+    ),
+    maxRegularizationsPerMonth: Math.max(
+      0,
+      Number(raw?.maxRegularizationsPerMonth ?? 0),
+    ),
+    autoAbsentIfNoPunch: raw?.autoAbsentIfNoPunch === true,
+  };
+  return { ...query, rules };
+}
+
+/** One day of the month grid, as GET /attendance/me/month returns it. */
+export type MonthDay = {
+  day: number;
+  status?: string | null;
+  /** Payroll period lock for this exact date. */
+  locked?: boolean;
+  /** Punched in with no punch-out yet. */
+  open?: boolean;
+};
+
+export function useMyMonthDays(year: number, month: number, enabled = true) {
+  return useQuery({
+    queryKey: ['attendance', 'me-month', year, month] as const,
+    queryFn: async ({ signal }) => {
+      const data = await api.get<{ days?: MonthDay[] }>(
+        `/attendance/me/month?year=${year}&month=${month}`,
+        { signal },
+      );
+      return Array.isArray(data?.days) ? data.days : [];
+    },
+    staleTime: 60_000,
+    enabled,
+  });
+}
 
 export const attendanceKeys = {
   today: () => ['attendance', 'me'] as const,
@@ -48,6 +184,8 @@ export const attendanceKeys = {
  */
 export type CalendarDayKind =
   | 'present'
+  /** Punched in but not yet out — the day's outcome isn't decided yet. */
+  | 'in-progress'
   | 'half'
   | 'absent'
   | 'wfh'
@@ -125,11 +263,23 @@ export function useMonthAttendance(year: number, month: number, enabled = true) 
 export function usePunch() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (action: 'PUNCH_IN' | 'PUNCH_OUT') =>
-      api.post<AttendanceDay>('/attendance/punch', { action }),
+    mutationFn: (input: {
+      action: 'PUNCH_IN' | 'PUNCH_OUT';
+      /** Sent only when the tenant has geo-fencing on. */
+      latitude?: number;
+      longitude?: number;
+    }) =>
+      api.post<AttendanceDay>('/attendance/punch', {
+        action: input.action,
+        ...(input.latitude !== undefined && input.longitude !== undefined
+          ? { latitude: input.latitude, longitude: input.longitude }
+          : {}),
+      }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: attendanceKeys.today() });
       queryClient.invalidateQueries({ queryKey: ['attendance', 'month'] });
+      queryClient.invalidateQueries({ queryKey: ['attendance', 'summary'] });
+      queryClient.invalidateQueries({ queryKey: ['attendance', 'calendar'] });
     },
   });
 }

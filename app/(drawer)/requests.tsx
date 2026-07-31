@@ -2,13 +2,20 @@ import { useRouter } from 'expo-router';
 import { CalendarX, ChevronLeft } from 'lucide-react-native';
 import { useMemo, useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
+import { Alert } from '../../src/components/CrossAlert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import Dropdown from '../../src/components/leave/Dropdown';
 import RequestCard from '../../src/components/leave/RequestCard';
+import { useCancelMyRequest, useMyRequests } from '../../src/api/leave';
+import { useAuth } from '../../src/auth/AuthContext';
 import CancelLeaveDialog from '../../src/components/leave/CancelLeaveDialog';
 import type { RequestStatus } from '../../src/components/leave/RequestCard';
-import { REQUESTS, type Request } from '../../src/components/leave/requestsData';
+import {
+  REQUESTS,
+  toRequest,
+  type Request,
+} from '../../src/components/leave/requestsData';
 import { cardShadow } from '../../src/components/shadow';
 
 const YEARS = ['2026', '2025', '2024'] as const;
@@ -46,6 +53,9 @@ function SummaryChip({ value, label }: { value: number; label: string }) {
 
 export default function AllRequestsScreen() {
   const router = useRouter();
+  const { isBackendSession } = useAuth();
+  const requestsQuery = useMyRequests(isBackendSession);
+  const cancelRequest = useCancelMyRequest();
   const [filter, setFilter] = useState<Filter>('All');
   const [year, setYear] = useState<string>('2026');
   const [cancelTarget, setCancelTarget] = useState<Request | null>(null);
@@ -56,22 +66,43 @@ export default function AllRequestsScreen() {
    */
   const [withdrawn, setWithdrawn] = useState<Record<string, RequestStatus>>({});
 
-  const requests = useMemo(
-    () =>
-      REQUESTS.map((r) =>
-        withdrawn[r.id] ? { ...r, status: withdrawn[r.id] } : r,
-      ),
-    [withdrawn],
-  );
+  const requests = useMemo(() => {
+    const source = isBackendSession
+      ? (requestsQuery.data ?? []).map(toRequest)
+      : REQUESTS;
+    return source.map((r) =>
+      withdrawn[r.id] ? { ...r, status: withdrawn[r.id] } : r,
+    );
+  }, [isBackendSession, requestsQuery.data, withdrawn]);
 
   const confirmCancel = (request: Request, reason: string) => {
-    // HR reviews the withdrawal, so it becomes a request rather than a done deal.
+    // HR reviews the withdrawal, so it becomes a request rather than a done
+    // deal. Flip optimistically; the refetch reconciles.
     setWithdrawn((current) => ({
       ...current,
       [request.id]: 'Cancellation requested',
     }));
     setCancelTarget(null);
-    console.log('Leave cancellation requested:', { id: request.id, reason });
+
+    if (!isBackendSession) return;
+    cancelRequest.mutate(
+      { id: request.id, reason },
+      {
+        onError: (error) => {
+          setWithdrawn((current) => {
+            const next = { ...current };
+            delete next[request.id];
+            return next;
+          });
+          Alert.alert(
+            'Could not withdraw',
+            error instanceof Error && error.message
+              ? error.message
+              : 'Please try again in a moment.',
+          );
+        },
+      },
+    );
   };
 
   const counts = useMemo(
@@ -115,15 +146,15 @@ export default function AllRequestsScreen() {
         <Pressable
           onPress={goBack}
           hitSlop={8}
-          className="h-11 w-11 items-center justify-center active:scale-95"
+          className="h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white active:scale-95"
         >
-          <ChevronLeft size={24} color="#14323F" />
+          <ChevronLeft size={22} color="#14323F" />
         </Pressable>
         <View className="min-w-0 flex-1">
-          <Text className="text-lg font-bold text-ink" numberOfLines={1}>
+          <Text className="text-[18px] font-bold leading-6 text-ink" numberOfLines={1}>
             Leave Requests
           </Text>
-          <Text className="text-xs text-slate-400" numberOfLines={1}>
+          <Text className="text-xs leading-4 text-slate-400" numberOfLines={1}>
             {counts.All} total · {counts.Pending} pending
           </Text>
         </View>
@@ -192,6 +223,10 @@ export default function AllRequestsScreen() {
                   <RequestCard
                     key={r.id}
                     type={r.type}
+                    category={r.category}
+                    reason={r.reason}
+                    appliedOn={r.appliedOn}
+                    actionDate={r.actionDate}
                     dates={r.dates}
                     days={r.days}
                     status={r.status}

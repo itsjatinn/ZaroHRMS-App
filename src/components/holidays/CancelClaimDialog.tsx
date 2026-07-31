@@ -30,7 +30,7 @@ export default function CancelClaimDialog({
           </View>
 
           <Text className="mt-3.5 text-[17px] font-bold text-ink">
-            Cancel approved leave?
+            Cancel holiday claim?
           </Text>
           <Text className="mt-2 text-[13px] leading-5 text-[#14323F]/65">
             <Text className="font-semibold text-ink">{holiday.name}</Text> will be
@@ -44,7 +44,7 @@ export default function CancelClaimDialog({
               accessibilityRole="button"
               className="h-10 items-center justify-center rounded-xl border border-slate-200 bg-white px-4 active:scale-95"
             >
-              <Text className="text-[13px] font-bold text-ink">Keep leave</Text>
+              <Text className="text-[13px] font-bold text-ink">Keep holiday</Text>
             </Pressable>
             <Pressable
               onPress={() => onConfirm(holiday)}
@@ -52,7 +52,7 @@ export default function CancelClaimDialog({
               className="h-10 items-center justify-center rounded-xl bg-[#B04A2A] px-4 active:scale-95"
             >
               <Text className="text-[13px] font-bold text-white">
-                Cancel approved leave
+                Cancel claim
               </Text>
             </Pressable>
           </View>

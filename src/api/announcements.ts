@@ -196,7 +196,24 @@ export function attachmentTypeFor(name: string): AttachmentType {
 export const announcementKeys = {
   mine: () => ['announcements', 'mine'] as const,
   comments: (id: string) => ['announcements', id, 'comments'] as const,
+  settings: () => ['announcements', 'settings'] as const,
 };
+
+/**
+ * HR-configured behaviour — today just how many days a read announcement stays
+ * in the Archive view. The backend defaults to 30 when never configured.
+ */
+export function useAnnouncementSettings(enabled = true) {
+  return useQuery({
+    queryKey: announcementKeys.settings(),
+    queryFn: ({ signal }) =>
+      api.get<{ archiveRetentionDays?: number }>('/announcements/settings', {
+        signal,
+      }),
+    staleTime: 5 * 60_000,
+    enabled,
+  });
+}
 
 /** Every SENT announcement addressed to the signed-in employee. */
 export function useMyAnnouncements(enabled = true) {

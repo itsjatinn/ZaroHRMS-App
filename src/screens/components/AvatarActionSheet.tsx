@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
 import {
-  Alert,
   Animated,
   Dimensions,
   Easing,
@@ -10,6 +9,7 @@ import {
   Text,
   View,
 } from 'react-native';
+import { Alert } from '../../components/CrossAlert';
 import {
   Camera,
   ChevronRight,

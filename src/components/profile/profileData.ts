@@ -26,6 +26,10 @@ export type InfoItem = {
   type?: 'text' | 'select' | 'date';
   /** Options for a 'select' field. */
   options?: string[];
+  /** HR-owned row inside an otherwise editable section — shows the lock. */
+  locked?: boolean;
+  /** Persist-slice field id, e.g. "contact.mobileNo". Absent = local only. */
+  field?: string;
 };
 
 export const PROFILE = {

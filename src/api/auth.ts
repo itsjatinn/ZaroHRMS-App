@@ -33,9 +33,16 @@ export type LoginInput = {
   password: string;
 };
 
-/** The app only distinguishes employee vs manager surfaces. */
+/**
+ * The app only distinguishes employee vs manager surfaces. This covers only
+ * the explicit account roles — most managers hold a plain EMPLOYEE role and
+ * are managers by reporting lines, which useIsManager() resolves from
+ * GET /employees/me/is-manager after sign-in (the same split the web makes).
+ */
 export function toAppRole(role: BackendRole): UserRole {
-  return role === 'MANAGER' ? 'manager' : 'employee';
+  return role === 'MANAGER' || role === 'REPORTING_MANAGER'
+    ? 'manager'
+    : 'employee';
 }
 
 export async function login(input: LoginInput): Promise<LoginSuccess> {

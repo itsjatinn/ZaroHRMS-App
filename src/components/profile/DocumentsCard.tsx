@@ -1,7 +1,8 @@
 import * as DocumentPicker from 'expo-document-picker';
 import { Eye, FileText, RefreshCw, Upload } from 'lucide-react-native';
 import { useState } from 'react';
-import { Alert, Pressable, Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
+import { Alert } from '../CrossAlert';
 
 import { DOCUMENTS, type DocItem } from './documentsData';
 

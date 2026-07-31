@@ -1,23 +1,38 @@
 import * as DocumentPicker from 'expo-document-picker';
-import { useFocusEffect } from 'expo-router';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useFocusEffect, useRouter } from 'expo-router';
+import { AlertCircle } from 'lucide-react-native';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Alert,
-  findNodeHandle,
+  ActivityIndicator,
   Keyboard,
   Pressable,
   ScrollView,
   Text,
   TextInput,
-  useWindowDimensions,
   View,
+  findNodeHandle,
+  useWindowDimensions,
 } from 'react-native';
+import { Alert } from '../../src/components/CrossAlert';
 import {
   SafeAreaView,
   useSafeAreaInsets,
 } from 'react-native-safe-area-context';
 
+import {
+  isWorkAttachmentRequired,
+  useWorkRequestPolicy,
+} from '../../src/api/leave';
+import {
+  requestErrorMessage,
+  uploadRequestAttachment,
+  useSubmitRequest,
+} from '../../src/api/submitRequest';
 import { useWorkRequestAllowance } from '../../src/api/workRequests';
+import { dateKey } from '../../src/components/leave/leavePolicy';
+import RequestSuccessModal, {
+  type SuccessDetail,
+} from '../../src/components/requests/RequestSuccessModal';
 import { useAuth } from '../../src/auth/AuthContext';
 import BackButton from '../../src/components/BackButton';
 import BalanceTile from '../../src/components/leave/BalanceTile';
@@ -98,7 +113,14 @@ export default function WorkFromHome() {
   const [fromDuration, setFromDuration] = useState('Full Day');
   const [toDuration, setToDuration] = useState('Full Day');
   const [reason, setReason] = useState('');
-  const [attachment, setAttachment] = useState<string | null>(null);
+  const [attachment, setAttachment] = useState<{
+    name: string;
+    uri: string;
+    mimeType?: string | null;
+  } | null>(null);
+  const [success, setSuccess] = useState<SuccessDetail[] | null>(null);
+  // Covers the attachment upload as well as the POST.
+  const [submitting, setSubmitting] = useState(false);
   const [attempted, setAttempted] = useState(false);
 
   const daysSelected = getSelectedDays({
@@ -181,24 +203,109 @@ export default function WorkFromHome() {
       });
 
       if (!result.canceled && result.assets.length > 0) {
-        setAttachment(result.assets[0].name);
+        const asset = result.assets[0];
+        setAttachment({
+          name: asset.name,
+          uri: asset.uri,
+          mimeType: asset.mimeType,
+        });
       }
     } catch {
       Alert.alert('Could not open the file picker.');
     }
   };
 
+  // HR toggles + attachment rules, the same ones the web's work-request page
+  // enforces before submitting.
+  const router = useRouter();
+  const policy = useWorkRequestPolicy(isBackendSession);
+  const submitWorkRequest = useSubmitRequest();
+
   /** The allowance for the type currently chosen. */
   const selectedAllowance =
     allowanceTiles.find((tile) => tile.type === applicationType)?.allowance ??
     null;
 
+  /**
+   * Rules the employee can act on before pressing submit. Missing required
+   * fields are excluded — the per-field error states already mark those, and
+   * repeating them on a half-filled form is noise.
+   */
+  const inlineNotices = useMemo(() => {
+    const out: string[] = [];
+    const category = applicationLabel;
+    if (category === 'WFH' && !policy.wfhEnabled) {
+      out.push('Work from home requests are disabled by HR.');
+    }
+    if (category === 'OD' && !policy.odEnabled) {
+      out.push('On-duty requests are disabled by HR.');
+    }
+    if (fromDate && toDate && startOfDay(toDate) < startOfDay(fromDate)) {
+      out.push('The end date must be on or after the start date.');
+    }
+    if (isWorkAttachmentRequired(policy, category, daysSelected) && !attachment) {
+      const afterDays = policy.attachment[category].afterDays;
+      out.push(
+        afterDays > 0
+          ? `An attachment is required for ${applicationLabel.toLowerCase()} above ${afterDays} day(s).`
+          : `An attachment is required for ${applicationLabel.toLowerCase()} requests.`,
+      );
+    }
+    const remaining = selectedAllowance?.remaining;
+    if (typeof remaining === 'number' && daysSelected > remaining) {
+      const period = selectedAllowance?.period === 'WEEKLY' ? 'week' : 'month';
+      out.push(
+        remaining === 0
+          ? `You have no ${applicationLabel} days left this ${period}.`
+          : `You have ${formatDays(remaining)} ${applicationLabel} day(s) left this ${period}, but this request is for ${formatDays(daysSelected)}.`,
+      );
+    }
+    return out;
+  }, [
+    applicationLabel,
+    policy,
+    fromDate,
+    toDate,
+    daysSelected,
+    attachment,
+    selectedAllowance,
+  ]);
+
   const submit = () => {
+    if (submitting) return;
     setAttempted(true);
-    if (!applicationType || !fromDate || !toDate || !reason.trim()) return;
+    if (!applicationType || !fromDate || !toDate) return;
+    // Reason is only mandatory when HR says so, as on the web.
+    if (policy.requireReason && !reason.trim()) return;
 
     if (startOfDay(toDate) < startOfDay(fromDate)) {
       Alert.alert('Check your dates', 'The end date must be on or after the start date.');
+      return;
+    }
+
+    // applicationType holds the display string ('Work from home' / 'On duty');
+    // applicationLabel is already the HRMS short code.
+    const category = applicationLabel;
+    if (category === 'WFH' && !policy.wfhEnabled) {
+      Alert.alert(
+        'Not available',
+        'Work from home requests are disabled by HR.',
+      );
+      return;
+    }
+    if (category === 'OD' && !policy.odEnabled) {
+      Alert.alert('Not available', 'On-duty requests are disabled by HR.');
+      return;
+    }
+
+    if (isWorkAttachmentRequired(policy, category, daysSelected) && !attachment) {
+      const afterDays = policy.attachment[category].afterDays;
+      Alert.alert(
+        'Attachment required',
+        afterDays > 0
+          ? `An attachment is required for ${applicationLabel.toLowerCase()} above ${afterDays} day(s).`
+          : `An attachment is required for ${applicationLabel.toLowerCase()} requests.`,
+      );
       return;
     }
 
@@ -217,19 +324,48 @@ export default function WorkFromHome() {
       return;
     }
 
-    const payload = {
-      applicationType,
-      fromDate: formatDate(fromDate),
-      fromDuration,
-      toDate: formatDate(toDate),
-      toDuration,
-      days: daysSelected,
-      reason: reason.trim(),
-      attachment,
-    };
+    if (!isBackendSession) {
+      Alert.alert(
+        'Sign in to submit',
+        'Submitting a request needs a live HRMS session.',
+      );
+      return;
+    }
 
-    console.log('Application request payload:', payload);
-    Alert.alert('Request submitted', 'Your application request was sent for approval.');
+    setSubmitting(true);
+    void (async () => {
+      try {
+        const stored = attachment
+          ? await uploadRequestAttachment(attachment)
+          : undefined;
+        await submitWorkRequest.mutateAsync({
+          category,
+          type: applicationType,
+          startDate: dateKey(fromDate),
+          endDate: dateKey(toDate),
+          dayCount: daysSelected,
+          fromSession: fromDuration === 'Half Day' ? 'first-half' : 'full',
+          toSession: toDuration === 'Half Day' ? 'first-half' : 'full',
+          reason: reason.trim(),
+          attachment: stored,
+        });
+        setSuccess([
+          { label: 'Type', value: applicationType },
+          {
+            label: 'Dates',
+            value:
+              dateKey(fromDate) === dateKey(toDate)
+                ? formatDate(fromDate)
+                : `${formatDate(fromDate)} – ${formatDate(toDate)}`,
+          },
+          { label: 'Days', value: `${daysSelected}` },
+        ]);
+      } catch (error) {
+        Alert.alert('Could not submit', requestErrorMessage(error));
+      } finally {
+        setSubmitting(false);
+      }
+    })();
   };
 
   return (
@@ -355,23 +491,59 @@ export default function WorkFromHome() {
             <ReasonCounter value={reason} />
           </View>
 
+          {inlineNotices.length ? (
+            <View className="mt-5 gap-2">
+              {inlineNotices.map((notice) => (
+                <View
+                  key={notice}
+                  className="flex-row items-start gap-2 rounded-2xl border border-red-200 bg-red-50 px-3.5 py-2.5"
+                >
+                  <AlertCircle size={15} color="#DC2626" />
+                  <Text className="flex-1 text-xs font-medium text-red-700">
+                    {notice}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          ) : null}
+
           <View className={isWide ? 'mt-6 flex-row items-end gap-5' : 'mt-6 gap-5'}>
             <View className="flex-1">
               <FieldLabel>Attachment</FieldLabel>
-              <AttachmentField fileName={attachment} onPress={pickFile} />
+              <AttachmentField fileName={attachment?.name ?? null} onPress={pickFile} />
             </View>
 
             <View className={isWide ? 'w-72' : ''}>
               <Pressable
                 onPress={submit}
-                className="h-12 items-center justify-center rounded-xl bg-ink px-5 active:scale-[0.98]"
+                disabled={submitting}
+                accessibilityRole="button"
+                accessibilityState={{ disabled: submitting, busy: submitting }}
+                style={{ opacity: submitting ? 0.75 : 1 }}
+                className="h-12 flex-row items-center justify-center gap-2 rounded-xl bg-ink px-5 active:scale-[0.98]"
               >
-                <Text className="text-sm font-bold text-white">Submit Request</Text>
+                {submitting ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : null}
+                <Text className="text-sm font-bold text-white">
+                  {submitting ? 'Submitting…' : 'Submit Request'}
+                </Text>
               </Pressable>
             </View>
           </View>
         </View>
       </ScrollView>
+
+      <RequestSuccessModal
+        visible={success !== null}
+        title="Request submitted"
+        message="Your request was sent to your manager for approval."
+        details={success ?? []}
+        onClose={() => {
+          setSuccess(null);
+          router.back();
+        }}
+      />
     </SafeAreaView>
   );
 }

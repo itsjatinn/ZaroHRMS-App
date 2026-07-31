@@ -1,5 +1,6 @@
 import { FileText, GraduationCap, type LucideIcon } from 'lucide-react-native';
 import { useMemo, useState } from 'react';
+import * as WebBrowser from 'expo-web-browser';
 import { ActivityIndicator, Linking, Pressable, Text, View } from 'react-native';
 
 import {
@@ -63,10 +64,35 @@ export default function QuickActionsCard() {
   const open = async (key: SatelliteKey) => {
     if (launching) return;
     setError(null);
+
+    // Tapping an unavailable tile explains itself rather than doing nothing.
+    // Which of the two is connected is per-organisation, so name the one the
+    // employee actually tapped.
+    if (!launchable.has(key)) {
+      const label = TILES.find((tile) => tile.key === key)?.label ?? 'This portal';
+      setError(
+        available.isError
+          ? `Couldn't check access to ${label}. Pull to refresh and try again.`
+          : `${label} isn't connected for your organisation yet. Ask your HR admin to enable it.`,
+      );
+      return;
+    }
+
     setLaunching(key);
     try {
+      // Minted once: each call issues a fresh short-lived signed URL, so the
+      // fallback below must reuse this one rather than ask for another.
       const url = await launchSatellite(key);
-      await Linking.openURL(url);
+      try {
+        // An in-app browser tab keeps the employee in the app and handles the
+        // signed URL reliably.
+        await WebBrowser.openBrowserAsync(url, {
+          presentationStyle: WebBrowser.WebBrowserPresentationStyle.FULL_SCREEN,
+        });
+      } catch {
+        // Some devices have no in-app browser; hand the same URL to the OS.
+        await Linking.openURL(url);
+      }
     } catch (err) {
       // The backend distinguishes "not licensed" (403) from "licensed but never
       // connected" (409); both are actionable by an admin, so pass its wording
@@ -103,10 +129,12 @@ export default function QuickActionsCard() {
             <Pressable
               key={tile.key}
               onPress={() => void open(tile.key)}
-              disabled={!ready || busy}
+              disabled={busy || !isBackendSession || available.isPending}
               accessibilityRole="button"
               accessibilityLabel={tile.label}
-              accessibilityState={{ disabled: !ready || busy }}
+              accessibilityState={{
+                disabled: busy || !isBackendSession || available.isPending,
+              }}
               className="flex-1 items-start gap-2 rounded-xl border bg-white p-3 active:scale-[0.98]"
               style={{ borderColor: TILE_BORDER, opacity: ready ? 1 : 0.55 }}
             >
@@ -143,11 +171,7 @@ export default function QuickActionsCard() {
         <Text className="text-xs text-slate-400">
           Not connected for your organisation yet.
         </Text>
-      ) : (
-        <Text className="text-xs text-slate-400">
-          Opens in your browser, already signed in.
-        </Text>
-      )}
+      ) : null}
 
       {error ? (
         <Text className="text-xs text-rose-500">{error}</Text>

@@ -21,6 +21,7 @@ import {
 } from 'react-native-safe-area-context';
 
 import {
+  useAnnouncementSettings,
   useMarkAnnouncementRead,
   useMyAnnouncements,
   type Announcement,
@@ -39,8 +40,8 @@ import {
 import { cardShadow } from '../../src/components/shadow';
 import { useAuth } from '../../src/auth/AuthContext';
 
-/** Days a read announcement stays in the Archive view, as on the web. */
-const ARCHIVE_RETENTION_DAYS = 30;
+/** Fallback until the HR-configured retention loads (the server default). */
+const DEFAULT_RETENTION_DAYS = 30;
 
 export default function Announcements() {
   const insets = useSafeAreaInsets();
@@ -68,6 +69,13 @@ export default function Announcements() {
   const demoMode = !isBackendSession || FORCE_DEMO_ANNOUNCEMENTS;
 
   const announcements = useMyAnnouncements(!demoMode);
+  // HR sets how long read announcements stay in the Archive; the web reads the
+  // same setting. Falls back to the server default while loading and on demo.
+  const settingsQuery = useAnnouncementSettings(!demoMode);
+  const retentionDays =
+    settingsQuery.data?.archiveRetentionDays && settingsQuery.data.archiveRetentionDays > 0
+      ? settingsQuery.data.archiveRetentionDays
+      : DEFAULT_RETENTION_DAYS;
   const markRead = useMarkAnnouncementRead();
   const items = demoMode ? DEMO_ANNOUNCEMENTS : (announcements.data ?? []);
 
@@ -102,12 +110,12 @@ export default function Announcements() {
 
   /** Read announcements still inside the retention window. */
   const archived = useMemo(() => {
-    const cutoff = Date.now() - ARCHIVE_RETENTION_DAYS * 86400000;
+    const cutoff = Date.now() - retentionDays * 86400000;
     return sorted.filter((item) => {
       const readAt = readMap[item.id];
       return Boolean(readAt) && new Date(readAt).getTime() >= cutoff;
     });
-  }, [sorted, readMap]);
+  }, [sorted, readMap, retentionDays]);
 
   const visible = useMemo(() => {
     if (showArchive) return archived;
@@ -161,13 +169,15 @@ export default function Announcements() {
           hitSlop={8}
           accessibilityRole="button"
           accessibilityLabel="Go back"
-          className="h-11 w-11 items-center justify-center active:scale-95"
+          className="h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white active:scale-95"
         >
-          <ChevronLeft size={24} color="#14323F" />
+          <ChevronLeft size={22} color="#14323F" />
         </Pressable>
         <View className="min-w-0 flex-1">
-          <Text className="text-lg font-bold text-ink">Announcements</Text>
-          <Text className="text-xs text-slate-400" numberOfLines={1}>
+          <Text className="text-[18px] font-bold leading-6 text-ink" numberOfLines={1}>
+            Announcements
+          </Text>
+          <Text className="text-xs leading-4 text-slate-400" numberOfLines={1}>
             Updates shared by your leadership team
           </Text>
         </View>
@@ -300,7 +310,7 @@ export default function Announcements() {
                 </Text>
                 <Text className="text-xs" style={{ color: brandAlpha(0.55) }}>
                   {showArchive
-                    ? `${visible.length} read · kept ${ARCHIVE_RETENTION_DAYS} days`
+                    ? `${visible.length} read · kept ${retentionDays} days`
                     : `${visible.length} ${
                         visible.length === 1 ? 'update' : 'updates'
                       }`}
@@ -313,6 +323,7 @@ export default function Announcements() {
                   filter={filter}
                   hasAny={items.length > 0}
                   isError={!demoMode && announcements.isError}
+                  retentionDays={retentionDays}
                 />
               ) : (
                 <View className="gap-3">
@@ -342,11 +353,13 @@ function EmptyState({
   filter,
   hasAny,
   isError,
+  retentionDays,
 }: {
   showArchive: boolean;
   filter: FilterValue;
   hasAny: boolean;
   isError: boolean;
+  retentionDays: number;
 }) {
   const headline = isError
     ? 'Could not load announcements.'
@@ -361,7 +374,7 @@ function EmptyState({
             : 'No announcements to show.';
 
   const detail = showArchive
-    ? `Announcements you mark as read appear here for ${ARCHIVE_RETENTION_DAYS} days before being cleared.`
+    ? `Announcements you mark as read appear here for ${retentionDays} days before being cleared.`
     : isError
       ? 'Pull down to retry.'
       : null;

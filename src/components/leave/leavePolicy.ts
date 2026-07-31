@@ -287,6 +287,14 @@ export function evaluateLeaveRequest(input: EvaluateInput): PolicyEvaluation {
   if (type?.paid === false && totalDays) {
     warnings.push('This leave type is unpaid.');
   }
+  // A range made entirely of week-offs/holidays charges nothing. Not a hard
+  // block — the server does the authoritative count — but the employee should
+  // know before submitting a request that consumes no leave.
+  if (totalDays === 0) {
+    warnings.push(
+      'The selected range has no payable leave days after weekend/holiday exclusions.',
+    );
+  }
 
   return {
     totalDays,

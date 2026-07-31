@@ -107,6 +107,76 @@ the signed URL directly (`window.open`, or an `<a download>` for save). The
 browser already knows how to display a PDF and how to download a file; the
 native dance exists only because mobile OSes don't.
 
+### 1e. `Alert.alert` is a no-op on web — critical
+
+`react-native-web` ships `class Alert { static alert() {} }`. An empty function.
+There are **55 call sites across 23 files**.
+
+Two distinct failures:
+
+- **44 informational calls** (errors, confirmations of success) vanish silently.
+  A failed upload or an unreachable server produces no feedback at all.
+- **11 calls carry an `onPress` callback in a button array**, and on web that
+  callback never fires — so the action silently does nothing. This includes
+  `app/(drawer)/settings.tsx:33` (**sign out**) and
+  `app/(drawer)/(tabs)/approvals.tsx:54` (**approve / reject**), plus
+  `apply-leave.tsx:334`, `notifications.tsx:108`, `support.tsx:39`,
+  `AvatarActionSheet.tsx:89`, `PhotoPickerSheet.tsx:88`,
+  `CollectionEditor.tsx:214`, `AttendanceCalendar.tsx:135`,
+  `LeaveCalendar.tsx:123`, `ContactTile.tsx:10`.
+
+Sign-out and approvals appearing to do nothing is disqualifying for an employee
+deployment, so this is a launch blocker rather than a polish item.
+
+Fix: a platform-split shim following the pattern already established by
+`CrossDatePicker` and `secureStorage` — `src/lib/alert.ts` re-exports React
+Native's `Alert` unchanged; `src/lib/alert.web.ts` implements the same signature
+over `window.confirm` / `window.alert`, mapping a single-button call to `alert()`
+and a two-button call to `confirm()`, invoking the matching `onPress`. Then
+repoint the `Alert` import in all 23 files.
+
+Mechanical, but it is the largest single task in this plan and it touches the
+most files. It is also the reason a native-only codebase cannot simply be
+pointed at a browser and shipped.
+
+### 1f. Credential autofill on web
+
+Native gets password autofill from the OS keychain. A browser gets nothing
+unless the markup says what the fields are, and the sign-in produced none of the
+required signals.
+
+What already worked, and needed no change: `AuthContext` persists the org slug
+unconditionally (surviving sign-out) and the email whenever "Remember me" is on,
+and `sign-in.tsx` passes both on every sign-in path. The app's own memory of the
+slug and email is fine.
+
+What was missing is everything the *browser* needs:
+
+- **No autofill tokens.** The email and password fields carried no
+  `autoComplete`. Added `username` and `current-password` — `username` rather
+  than `email` because that is the token password managers pair with
+  `current-password` to form one stored credential. The org field already had
+  `organization`.
+- **No form element.** react-native-web renders bare inputs; nothing navigates
+  on sign-in. With no `<form>` and no submit control, Chrome and Safari have no
+  submission event to react to and generally never offer to save the login. A
+  platform-split `AuthForm` (`AuthForm.tsx` passthrough / `AuthForm.web.tsx`
+  real `<form>`) fixes this. `display: contents` keeps it out of layout so the
+  flex tree is unchanged, and a hidden submit button makes both `requestSubmit()`
+  and the Enter key work.
+- **A two-step flow that unmounts the username.** This is the subtle one: on
+  step 2 the email field is replaced by a summary row, so the DOM holds a lone
+  password input. Password managers pair username with password, and with no
+  username present both saving and refilling degrade. `AuthForm.web.tsx` renders
+  a `hidden` `autocomplete="username"` input carrying the email for that step —
+  the documented fix for username-first flows.
+
+**Honest limitation:** password managers store a username/password pair per
+origin, not three fields. The org slug is not part of the stored credential and
+never will be. All three still end up filled, but by two different mechanisms —
+the browser supplies email and password, the app supplies the slug from its own
+storage (or from `?org=`).
+
 ## 2. Build configuration
 
 ### `app.json`
@@ -171,10 +241,14 @@ mobile site.
 
 Three rails, all mandatory:
 
-**Kill switch.** The middleware reads `NEXT_PUBLIC_MOBILE_REDIRECT_URL`. Unset
-or empty means the middleware returns `NextResponse.next()` immediately. It
-ships **off** and is enabled by setting the variable, so turning it off again in
-an incident is an env-var change, not a revert.
+**Kill switch.** The middleware reads `MOBILE_REDIRECT_URL`. Unset or empty
+skips the whole block. It ships **off** and is enabled by setting the variable.
+
+Deliberately *not* `NEXT_PUBLIC_`-prefixed: those are inlined into the bundle at
+build time, and the redirect target is server-side logic with no business in the
+client bundle. Caveat to be honest about — on Vercel, changing the variable still
+requires a redeploy to take effect, so this is a one-deploy toggle rather than an
+instant switch.
 
 **Escape hatch.** `?desktop=1` on any panel URL sets a `zaro_force_desktop`
 cookie (1 year, `SameSite=Lax`) and suppresses the redirect from then on. The
@@ -204,6 +278,33 @@ Plus the usual `/api`, `/_next`, and static-asset exclusions, via the matcher.
 The redirect targets the mobile **root**, not a path-mapped equivalent: panel
 routes and mobile routes do not correspond 1:1, and guessing wrong lands users
 on a 404 instead of a home screen.
+
+### Tenant context must survive the redirect
+
+The panel is multi-tenant: `extractTenantSlug` in `src/middleware.ts` reads the
+left-most label of a non-apex host, so `acme.hrms.zarohr.com` resolves to tenant
+`acme`, and the login page uses that to skip its Organization field.
+
+The mobile app cannot do this — it is served from one fixed host, so
+`app/(auth)/sign-in.tsx` asks for the org slug explicitly and remembers it per
+device. That is correct for native, but it means a redirect from a tenant
+subdomain **drops the tenant context**: the user lands on a sign-in form
+demanding a slug they may not know, on a fresh browser that has nothing
+remembered. The redirect would make login measurably worse for exactly the users
+it targets.
+
+Fix, in two halves:
+
+- The middleware appends the resolved slug to the redirect:
+  `https://app.zarohr.com/?org=<slug>`. On the apex, no param.
+- Web sign-in reads `?org=` on first load and seeds the org field from it,
+  taking precedence over nothing and deferring to an already-remembered slug
+  only if the param is absent.
+
+**Namespace note:** hosting at `app.zarohr.com` permanently reserves `app` as a
+tenant slug — `extractTenantSlug` would resolve that host to tenant `app`. The
+panel's middleware never runs on it (separate Vercel project), so nothing breaks
+today, but `app` must be blocked from the tenant slug pool.
 
 UA detection is a conservative regex over `Android|iPhone|iPod|Windows Phone`.
 iPad is deliberately excluded — it reports a desktop UA on modern iPadOS and the
@@ -239,7 +340,13 @@ Fixing the gaps is out of scope. The gap list is the product.
    access token that simply hasn't expired yet.
 4. Exercise each fixed surface on web: delegate-approvals date picker, document
    preview, document open/save.
-5. Deep-link directly to `/leave` and `/my-team` to confirm the rewrite.
+5. **Alert-dependent actions specifically** — sign out from Settings, and
+   approve a request from Approvals. Both are silent no-ops before fix 1e, so
+   they are the sharpest test of it. Then confirm an informational alert (e.g.
+   an upload failure) is actually visible.
+6. Deep-link directly to `/leave` and `/my-team` to confirm the rewrite.
+7. Sign in from `https://app.zarohr.com/?org=<slug>` and confirm the org field
+   is prefilled.
 
 **Rollout:**
 

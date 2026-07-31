@@ -4,9 +4,16 @@ import {
   type DrawerContentComponentProps,
 } from '@react-navigation/drawer';
 import { usePathname, useRouter } from 'expo-router';
-import type { ReactNode } from 'react';
-import { Image, Pressable, Text, View } from 'react-native';
+import { useState, type ReactNode } from 'react';
+import { ActivityIndicator, Image, Pressable, Text, View } from 'react-native';
+import { Alert } from './CrossAlert';
 
+import { useMyProfile } from '../api/profile';
+import { useProfilePhoto, useSaveProfilePhoto } from '../api/profilePhoto';
+import { useIsManager } from '../api/team';
+import { getInitials } from './profile/initials';
+import PhotoCropModal, { type CropSource } from './profile/PhotoCropModal';
+import PhotoPickerSheet from './profile/PhotoPickerSheet';
 import { useAuth } from '../auth/AuthContext';
 import { currentUser } from '../data/currentUser';
 
@@ -50,9 +57,58 @@ const MENU: MenuItem[] = [
 ];
 
 export default function DrawerContent(props: DrawerContentComponentProps) {
+  // Live identity for the sidebar header — name from the login session, the
+  // rest from the profile read. The demo session keeps the sample identity.
+  const { isBackendSession, user, signOut } = useAuth();
+  // My Team is a manager surface — same composite gate as the approvals tab
+  // (explicit role OR reporting lines).
+  const managerAccess = useIsManager();
+  const menu: MenuItem[] = managerAccess.isManager
+    ? [
+        {
+          label: 'My Team',
+          route: '/my-team',
+          icon: (c) => <Feather name="users" size={20} color={c} />,
+        },
+        ...MENU,
+      ]
+    : MENU;
+  const profileQuery = useMyProfile(isBackendSession);
+  const photoQuery = useProfilePhoto(isBackendSession);
+  const savePhoto = useSaveProfilePhoto();
+  const [photoSheetOpen, setPhotoSheetOpen] = useState(false);
+  // URI of the image being cropped, between picking and saving.
+  const [cropSource, setCropSource] = useState<CropSource | null>(null);
+
+  const savePhotoValue = (dataUrl: string | null) => {
+    if (!isBackendSession) {
+      Alert.alert('Sign in to save', 'Photo changes need a live HRMS session.');
+      return;
+    }
+    savePhoto.mutate(dataUrl, {
+      onError: () =>
+        Alert.alert(
+          'Could not save your photo',
+          'Please try again in a moment.',
+        ),
+    });
+  };
+  const identity = isBackendSession
+    ? {
+        name: profileQuery.data?.name || user?.name || currentUser.name,
+        // Null rather than a dash: the pill is hidden until a real value
+        // arrives, so a still-loading profile never renders a placeholder that
+        // looks like data.
+        subtitle: profileQuery.data?.designation?.trim() || null,
+        // The employee's own picture wins; the HR-set master photo is the
+        // fallback. With neither, initials — never the sample portrait, which
+        // would show a stranger's face as this employee's photo.
+        avatar: photoQuery.data || profileQuery.data?.profilePhoto || null,
+      }
+    : { ...currentUser, subtitle: currentUser.designation };
+
   const router = useRouter();
   const pathname = usePathname();
-  const { signOut } = useAuth();
 
   return (
     <DrawerContentScrollView
@@ -68,25 +124,46 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
             {/* Profile photo with yellow outline + camera button */}
             <View className="relative h-20 w-20">
               <View className="h-20 w-20 overflow-hidden rounded-2xl border-2 border-[#F5D14E]">
-                <Image
-                  source={{ uri: currentUser.avatar }}
-                  className="h-full w-full"
-                />
+                {identity.avatar ? (
+                  <Image
+                    source={{ uri: identity.avatar }}
+                    className="h-full w-full"
+                  />
+                ) : (
+                  <View className="h-full w-full items-center justify-center bg-white/10">
+                    <Text className="text-2xl font-bold text-white">
+                      {getInitials(identity.name, user?.email)}
+                    </Text>
+                  </View>
+                )}
               </View>
-              <Pressable className="absolute -bottom-1 -right-1 h-7 w-7 items-center justify-center rounded-full border-2 border-[#14323F] bg-[#F5D14E]">
+              {savePhoto.isPending ? (
+                <View className="absolute inset-0 items-center justify-center rounded-2xl bg-black/45">
+                  <ActivityIndicator color="#FFFFFF" />
+                </View>
+              ) : null}
+              <Pressable
+                onPress={() => setPhotoSheetOpen(true)}
+                disabled={savePhoto.isPending}
+                accessibilityRole="button"
+                accessibilityLabel="Change profile photo"
+                className="absolute -bottom-1 -right-1 h-7 w-7 items-center justify-center rounded-full border-2 border-[#14323F] bg-[#F5D14E] active:scale-95"
+              >
                 <Feather name="camera" size={13} color={NAVY} />
               </Pressable>
             </View>
 
             {/* Name + employee id pill */}
             <Text className="mt-4 text-2xl font-bold text-white">
-              {currentUser.name}
+              {identity.name}
             </Text>
-            <View className="mt-2 rounded-full bg-white/10 px-3 py-1">
-              <Text className="text-xs text-white/80">
-                {currentUser.employeeId}
-              </Text>
-            </View>
+            {identity.subtitle ? (
+              <View className="mt-2 rounded-full bg-white/10 px-3 py-1">
+                <Text className="text-xs text-white/80" numberOfLines={1}>
+                  {identity.subtitle}
+                </Text>
+              </View>
+            ) : null}
 
             {/* View profile link */}
             <Pressable
@@ -108,7 +185,7 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
 
           {/* Menu items */}
           <View className="gap-2">
-            {MENU.map((item) => {
+            {menu.map((item) => {
               const isActive = pathname === item.route;
               const tint = isActive ? NAVY : '#FFFFFF';
               return (
@@ -154,6 +231,25 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
           </Pressable>
         </View>
       </View>
+      <PhotoPickerSheet
+        visible={photoSheetOpen}
+        hasPhoto={Boolean(photoQuery.data)}
+        onClose={() => setPhotoSheetOpen(false)}
+        onPicked={savePhotoValue}
+        onCrop={(picked) => {
+          setPhotoSheetOpen(false);
+          setCropSource(picked);
+        }}
+      />
+
+      <PhotoCropModal
+        source={cropSource}
+        onCancel={() => setCropSource(null)}
+        onDone={(dataUrl) => {
+          setCropSource(null);
+          savePhotoValue(dataUrl);
+        }}
+      />
     </DrawerContentScrollView>
   );
 }
