@@ -36,11 +36,23 @@ export function lockViewportToDesignWidth(): void {
     // output back in and drift further on every orientation change.
     const deviceWidth = window.screen?.width || window.innerWidth;
 
+    if (deviceWidth >= PHONE_MAX) {
+      meta.setAttribute('content', DEVICE_WIDTH_VIEWPORT);
+      return;
+    }
+
+    // The fit scale must be spelled out. `width=390` alone leaves
+    // initial-scale up to the browser, and Android Chrome then renders the
+    // 390px layout at 1:1 inside a narrower window — the page looks ~8%
+    // zoomed-in, the spare 30px pans as horizontal scroll, and opening the
+    // drawer in that state lets the whole page wander. Pinning initial-scale
+    // (and minimum-scale, so the page cannot be left stuck zoomed out) makes
+    // the layout exactly fill the screen. Zooming IN stays available —
+    // maximum-scale is deliberately not set, for accessibility.
+    const scale = (deviceWidth / DESIGN_WIDTH).toFixed(4);
     meta.setAttribute(
       'content',
-      deviceWidth >= PHONE_MAX
-        ? DEVICE_WIDTH_VIEWPORT
-        : `width=${DESIGN_WIDTH}, shrink-to-fit=no`,
+      `width=${DESIGN_WIDTH}, initial-scale=${scale}, minimum-scale=${scale}, shrink-to-fit=no`,
     );
   };
 
