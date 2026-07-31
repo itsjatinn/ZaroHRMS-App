@@ -21,6 +21,7 @@ import { QueryClientProvider } from '@tanstack/react-query';
 import { queryClient } from '../src/api/queryClient';
 import { AuthProvider, useAuth } from '../src/auth/AuthContext';
 import AnimatedSplash from '../src/components/AnimatedSplash';
+import { lockViewportToDesignWidth } from '../src/web/viewport';
 
 // Disable react-freeze. When a screen is pushed on top, freeze suspends the
 // screen below and re-renders it on return; on Android that re-measure clips the
@@ -28,6 +29,11 @@ import AnimatedSplash from '../src/components/AnimatedSplash';
 // returning from forgot-password). Keeping screens unfrozen preserves the
 // original, correct text layout.
 enableFreeze(false);
+
+// Web only, and at module scope so it lands before the first render rather than
+// after — the splash covers the bundle download, so the scale is already
+// correct by the time anything is visible. No-op on native.
+lockViewportToDesignWidth();
 
 // Keep the native splash up until fonts and the persisted session are both
 // ready, so we never render text in a fallback font or flash the sign-in screen.
