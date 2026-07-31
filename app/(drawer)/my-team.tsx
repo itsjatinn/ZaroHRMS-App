@@ -7,6 +7,9 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useIsManager, useTeamMembers } from '../../src/api/team';
 import { useAuth } from '../../src/auth/AuthContext';
 import BackButton from '../../src/components/BackButton';
+import AppScrollView from '../../src/components/AppScrollView';
+import FilterSheet, { FilterIconButton } from '../../src/components/FilterSheet';
+import PageLoading from '../../src/components/PageLoading';
 import { cardShadow } from '../../src/components/shadow';
 import AttendanceCalendar from '../../src/components/team/AttendanceCalendar';
 import LeaveCalendar from '../../src/components/team/LeaveCalendar';
@@ -126,6 +129,7 @@ export default function MyTeamScreen() {
   const [view, setView] = useState<TeamView>('roster');
   const [query, setQuery] = useState('');
   const [status, setStatus] = useState<'All' | TeamStatus>('All');
+  const [filterOpen, setFilterOpen] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
   const searchRef = useRef<TextInput>(null);
   const searchTargetRef = useRef<number | null>(null);
@@ -187,50 +191,45 @@ export default function MyTeamScreen() {
 
   return (
     <SafeAreaView edges={['top', 'left', 'right']} className="flex-1 bg-canvas">
-      <ScrollView
+      <AppScrollView
         ref={scrollRef}
         className="flex-1"
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: keyboardHeight + insets.bottom + 112 }}
       >
         <View className="gap-4 px-4 pt-2">
           <View className="-mx-4">
-            <BackButton title="My team" subtitle="Today’s roster, attendance, and planned leave" />
+            <BackButton title="My team" />
           </View>
 
           <ViewSwitcher view={view} onChange={setView} />
 
-          <View className="flex-row items-center rounded-xl border border-slate-200 bg-white px-3">
-            <Feather name="search" size={18} color="#94A3B8" />
-            <TextInput
-              ref={searchRef}
-              value={query}
-              onChangeText={setQuery}
-              onFocus={handleSearchFocus}
-              placeholder="Search name, role, ID…"
-              placeholderTextColor="#94A3B8"
-              returnKeyType="search"
-              blurOnSubmit
-              onSubmitEditing={Keyboard.dismiss}
-              className="ml-2 h-12 flex-1 text-sm text-ink"
-            />
-            {query ? (
-              <Pressable onPress={() => setQuery('')} hitSlop={8}>
-                <Feather name="x" size={16} color="#94A3B8" />
-              </Pressable>
-            ) : null}
+          <View className="flex-row items-center gap-2">
+            <View className="min-w-0 flex-1 flex-row items-center rounded-xl border border-slate-200 bg-white px-3">
+              <Feather name="search" size={18} color="#94A3B8" />
+              <TextInput
+                ref={searchRef}
+                value={query}
+                onChangeText={setQuery}
+                onFocus={handleSearchFocus}
+                placeholder="Search name, role, ID…"
+                placeholderTextColor="#94A3B8"
+                returnKeyType="search"
+                blurOnSubmit
+                onSubmitEditing={Keyboard.dismiss}
+                className="ml-2 h-12 flex-1 text-sm text-ink"
+              />
+              {query ? (
+                <Pressable onPress={() => setQuery('')} hitSlop={8}>
+                  <Feather name="x" size={16} color="#94A3B8" />
+                </Pressable>
+              ) : null}
+            </View>
+            <FilterIconButton onPress={() => setFilterOpen(true)} />
           </View>
 
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
-            {(['All', 'Present', 'WFH/WO', 'On leave', 'Absent'] as const).map((item) => (
-              <Pressable key={item} onPress={() => setStatus(item)} className={`rounded-full border px-4 py-2 ${status === item ? 'border-ink bg-ink' : 'border-slate-200 bg-white'}`}>
-                <Text className={`text-xs font-semibold ${status === item ? 'text-white' : 'text-slate-500'}`}>{item === 'All' ? 'All statuses' : item}</Text>
-              </Pressable>
-            ))}
-          </ScrollView>
-
-          {view === 'roster' ? (
+          {isBackendSession && teamQuery.isPending ? (
+            <PageLoading label="Loading team..." />
+          ) : view === 'roster' ? (
             <>
               <View className="flex-row flex-wrap justify-between gap-y-2">
                 <SummaryCard icon={<Feather name="users" size={18} color="#6258B2" />} label="Team size" value={roster.length} subtitle="direct reports" color="#6258B2" background="#F0EEFA" />
@@ -259,7 +258,18 @@ export default function MyTeamScreen() {
             <LeaveCalendar team={filteredTeam} />
           )}
         </View>
-      </ScrollView>
+      </AppScrollView>
+      <FilterSheet
+        visible={filterOpen}
+        title="Team"
+        value={status}
+        options={(['All', 'Present', 'WFH/WO', 'On leave', 'Absent'] as const).map((item) => ({
+          value: item,
+          label: item === 'All' ? 'All statuses' : item,
+        }))}
+        onChange={setStatus}
+        onClose={() => setFilterOpen(false)}
+      />
     </SafeAreaView>
   );
 }

@@ -1,4 +1,4 @@
-import { LayoutAnimation, ScrollView, View } from 'react-native';
+import { LayoutAnimation, View } from 'react-native';
 import { Alert } from '../../src/components/CrossAlert';
 import { useMemo, useState } from 'react';
 import {
@@ -31,6 +31,8 @@ import {
 } from '../../src/api/profilePhoto';
 import { useAuth } from '../../src/auth/AuthContext';
 import BackButton from '../../src/components/BackButton';
+import AppScrollView from '../../src/components/AppScrollView';
+import PageLoading from '../../src/components/PageLoading';
 import { cardShadow } from '../../src/components/shadow';
 import ProfileHeader from '../../src/components/profile/ProfileHeader';
 import PhotoCropModal, {
@@ -284,12 +286,15 @@ export default function ViewProfile() {
   return (
     <SafeAreaView edges={['top', 'left', 'right']} className="flex-1 bg-canvas">
       <BackButton title="View Profile" />
-      <ScrollView
+      <AppScrollView
         className="flex-1"
         contentContainerClassName="p-4 gap-5"
         contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}
-        showsVerticalScrollIndicator={false}
       >
+        {isBackendSession && profileQuery.isPending ? (
+          <PageLoading label="Loading profile..." />
+        ) : (
+          <>
         <ProfileHeader
           {...headerIdentity}
           onEditPhoto={() => setPhotoSheetOpen(true)}
@@ -323,7 +328,9 @@ export default function ViewProfile() {
             />
           ))}
         </View>
-      </ScrollView>
+          </>
+        )}
+      </AppScrollView>
 
       <PhotoPickerSheet
         visible={photoSheetOpen}

@@ -263,21 +263,27 @@ export default function SignInScreen() {
           ) : (
             <Pressable
               onPress={editOrg}
-              className="flex-row items-center justify-between rounded-2xl border border-slate-200 bg-white px-4 py-3"
+              className="h-14 flex-row items-center rounded-2xl border-[1.5px] border-slate-300 bg-white px-4"
               accessibilityRole="button"
               accessibilityLabel="Change organization"
             >
-              <View className="min-w-0 flex-1">
+              <View className="absolute -top-2.5 left-3 px-1.5" pointerEvents="none">
+                <View className="absolute inset-0 overflow-hidden rounded-[4px]">
+                  <View className="h-1/2 w-full bg-canvas" />
+                  <View className="h-1/2 w-full bg-white" />
+                </View>
                 <Text
-                  className="text-xs text-slate-500"
-                  style={{ fontFamily: font.medium }}
+                  className="text-sm text-slate-500"
+                  style={{ fontFamily: font.semibold, lineHeight: 18 }}
                 >
                   Organization
                 </Text>
+              </View>
+              <View className="min-w-0 flex-1">
                 <Text
                   className="text-base text-ink"
                   numberOfLines={1}
-                  style={{ fontFamily: font.semibold }}
+                  style={{ fontFamily: font.regular }}
                 >
                   {orgName ?? normalizeOrgSlug(org)}
                 </Text>

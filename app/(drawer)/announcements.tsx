@@ -7,14 +7,7 @@ import {
   Megaphone,
 } from 'lucide-react-native';
 import { useMemo, useState } from 'react';
-import {
-  ActivityIndicator,
-  Pressable,
-  RefreshControl,
-  ScrollView,
-  Text,
-  View,
-} from 'react-native';
+import { Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
 import {
   SafeAreaView,
   useSafeAreaInsets,
@@ -24,7 +17,6 @@ import {
   useAnnouncementSettings,
   useMarkAnnouncementRead,
   useMyAnnouncements,
-  type Announcement,
 } from '../../src/api/announcements';
 import AnnouncementCard from '../../src/components/announcements/AnnouncementCard';
 import {
@@ -37,7 +29,8 @@ import {
   DEMO_ANNOUNCEMENTS,
   FORCE_DEMO_ANNOUNCEMENTS,
 } from '../../src/components/announcements/demoAnnouncements';
-import { cardShadow } from '../../src/components/shadow';
+import FilterSheet, { FilterIconButton } from '../../src/components/FilterSheet';
+import PageLoading from '../../src/components/PageLoading';
 import { useAuth } from '../../src/auth/AuthContext';
 
 /** Fallback until the HR-configured retention loads (the server default). */
@@ -59,6 +52,7 @@ export default function Announcements() {
   const [filter, setFilter] = useState<FilterValue>('all');
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [showArchive, setShowArchive] = useState(false);
+  const [filterOpen, setFilterOpen] = useState(false);
   /** Ids read in this session — merged with the server's readAt below. */
   const [locallyRead, setLocallyRead] = useState<Record<string, string>>({});
 
@@ -174,13 +168,14 @@ export default function Announcements() {
           <ChevronLeft size={22} color="#14323F" />
         </Pressable>
         <View className="min-w-0 flex-1">
-          <Text className="text-[18px] font-bold leading-6 text-ink" numberOfLines={1}>
+          <Text
+            className="text-center text-[18px] font-bold leading-6 text-ink"
+            numberOfLines={1}
+          >
             Announcements
           </Text>
-          <Text className="text-xs leading-4 text-slate-400" numberOfLines={1}>
-            Updates shared by your leadership team
-          </Text>
         </View>
+        <FilterIconButton onPress={() => setFilterOpen(true)} />
         <Pressable
           onPress={() => setShowArchive((value) => !value)}
           hitSlop={8}
@@ -219,40 +214,8 @@ export default function Announcements() {
           />
         }
       >
-        {/* Show filter + Mark all read / Archive toggle */}
+        {/* Mark all read */}
         <View className="gap-2.5">
-          <View className="flex-row items-center gap-2">
-            {FILTER_OPTIONS.map((option) => {
-              const active = !showArchive && option.value === filter;
-              return (
-                <Pressable
-                  key={option.value}
-                  onPress={() => {
-                    setShowArchive(false);
-                    setFilter(option.value);
-                  }}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected: active }}
-                  className="flex-1 items-center justify-center rounded-full border py-2"
-                  style={{
-                    backgroundColor: active ? BRAND_PRIMARY : '#FFFFFF',
-                    borderColor: active ? BRAND_PRIMARY : brandAlpha(0.15),
-                  }}
-                >
-                  <Text
-                    className="text-[13px] font-semibold"
-                    style={{ color: active ? '#FFFFFF' : brandAlpha(0.65) }}
-                  >
-                    {option.label}
-                    {option.value === 'unread' && unreadCount > 0
-                      ? ` · ${unreadCount}`
-                      : ''}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
-
           {!showArchive && unreadCount > 0 ? (
             <Pressable
               onPress={onMarkAllRead}
@@ -272,18 +235,7 @@ export default function Announcements() {
         </View>
 
         {announcements.isPending && !demoMode ? (
-          <View
-            style={cardShadow}
-            className="items-center gap-3 rounded-[22px] border border-slate-100 bg-white px-6 py-10"
-          >
-            <ActivityIndicator color={brandAlpha(0.4)} />
-            <Text
-              className="text-sm font-semibold"
-              style={{ color: brandAlpha(0.55) }}
-            >
-              Fetching your latest updates…
-            </Text>
-          </View>
+          <PageLoading label="Loading announcements..." />
         ) : (
           <>
             {showFeaturedHero && featured ? (
@@ -344,6 +296,21 @@ export default function Announcements() {
           </>
         )}
       </ScrollView>
+      <FilterSheet
+        visible={filterOpen}
+        title="Announcements"
+        value={filter}
+        options={FILTER_OPTIONS.map((option) => ({
+          value: option.value,
+          label: option.label,
+          count: option.value === 'unread' ? unreadCount : null,
+        }))}
+        onChange={(next) => {
+          setShowArchive(false);
+          setFilter(next);
+        }}
+        onClose={() => setFilterOpen(false)}
+      />
     </SafeAreaView>
   );
 }

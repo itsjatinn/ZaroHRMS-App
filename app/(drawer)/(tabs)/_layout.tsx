@@ -50,7 +50,7 @@ function AnimatedScene({ children }: { children: ReactNode }) {
   }));
 
   return (
-    <View style={{ flex: 1, backgroundColor: '#14323F' }}>
+    <View style={{ flex: 1, overflow: 'hidden', backgroundColor: '#14323F' }}>
       <Animated.View style={sceneStyle}>
         {children}
         <Animated.View pointerEvents="none" style={dimStyle} />
@@ -79,7 +79,7 @@ function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
       style={{
         position: 'absolute',
         left: (width - barWidth) / 2,
-        bottom: insets.bottom + 6,
+        bottom: insets.bottom + 18,
         width: barWidth,
         height: BAR_HEIGHT,
         flexDirection: 'row',

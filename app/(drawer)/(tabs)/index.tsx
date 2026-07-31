@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ScrollView, View } from 'react-native';
+import { View } from 'react-native';
 import Animated, {
   Easing,
   interpolate,
@@ -11,6 +11,7 @@ import Animated, {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import Header from '../../../src/components/Header';
+import AppScrollView from '../../../src/components/AppScrollView';
 import PulseCard from '../../../src/components/PulseCard';
 import PulseCelebrationOverlay from '../../../src/components/pulse/PulseCelebrationOverlay';
 import ProfileCompletionCard, {
@@ -124,7 +125,7 @@ export default function Index() {
       edges={['top', 'left', 'right']}
       className="flex-1 bg-canvas"
     >
-      <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
+      <AppScrollView className="flex-1">
         {/* gap-5 keeps steady spacing between home sections. The SafeAreaView
             already reserves the status-bar inset, so we only add a small top pad
             here. Bottom padding clears the absolute (floating) tab bar. */}
@@ -152,7 +153,7 @@ export default function Index() {
 
           <QuickActionsCard />
         </View>
-      </ScrollView>
+      </AppScrollView>
 
       {/* Outside the ScrollView so the burst spans the whole screen instead of
           being clipped to the scroll bounds. */}

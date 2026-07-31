@@ -1,12 +1,14 @@
 import { CalendarX } from 'lucide-react-native';
 import { Fragment, useMemo, useState } from 'react';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 import {
   SafeAreaView,
   useSafeAreaInsets,
 } from 'react-native-safe-area-context';
 
 import BackButton from '../../src/components/BackButton';
+import AppScrollView from '../../src/components/AppScrollView';
+import FilterSheet, { FilterIconButton } from '../../src/components/FilterSheet';
 import {
   getMonthLog,
   STATUS_META,
@@ -53,6 +55,7 @@ export default function AttendanceLogScreen() {
     month: now.getMonth(),
   });
   const [status, setStatus] = useState<StatusFilter>('all');
+  const [filterOpen, setFilterOpen] = useState(false);
 
   const entries = useMemo(() => getMonthLog(year, month), [year, month]);
 
@@ -81,16 +84,15 @@ export default function AttendanceLogScreen() {
         <View className="flex-1">
           <BackButton
             title="Activity Log"
-            subtitle="Your day-by-day attendance record."
-            subtitleNumberOfLines={2}
           />
         </View>
-        <View className="justify-center">
+        <View className="flex-row items-center gap-2">
           <MonthFilter
             year={year}
             month={month}
             onChange={(y, m) => setMonth({ year: y, month: m })}
           />
+          <FilterIconButton onPress={() => setFilterOpen(true)} />
         </View>
       </View>
 
@@ -102,38 +104,10 @@ export default function AttendanceLogScreen() {
         <SummaryChip value={counts.leave} label="Leave" />
       </View>
 
-      {/* Status filter */}
-      <View className="mt-4 flex-row flex-wrap gap-2 px-4">
-        {FILTER_OPTIONS.map((option) => {
-          const active = option.value === status;
-          return (
-            <Pressable
-              key={option.value}
-              onPress={() => setStatus(option.value)}
-              style={active ? undefined : cardShadow}
-              className={`rounded-full border px-3.5 py-2 ${
-                active
-                  ? 'border-[#14323F] bg-[#14323F]'
-                  : 'border-slate-200 bg-white active:scale-95'
-              }`}
-            >
-              <Text
-                className={`text-[13px] font-semibold ${
-                  active ? 'text-white' : 'text-slate-500'
-                }`}
-              >
-                {option.label}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </View>
-
-      <ScrollView
+      <AppScrollView
         className="flex-1"
         contentContainerClassName="pt-4"
         contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}
-        showsVerticalScrollIndicator={false}
       >
         {/* Day rows */}
         <View className="px-4">
@@ -164,7 +138,15 @@ export default function AttendanceLogScreen() {
             </View>
           )}
         </View>
-      </ScrollView>
+      </AppScrollView>
+      <FilterSheet
+        visible={filterOpen}
+        title="Activity"
+        value={status}
+        options={FILTER_OPTIONS}
+        onChange={setStatus}
+        onClose={() => setFilterOpen(false)}
+      />
     </SafeAreaView>
   );
 }

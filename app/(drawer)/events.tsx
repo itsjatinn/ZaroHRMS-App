@@ -1,13 +1,16 @@
 import { CalendarDays, Search, X } from 'lucide-react-native';
 import { useMemo, useState } from 'react';
 import { Alert } from '../../src/components/CrossAlert';
-import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { Pressable, Text, TextInput, View } from 'react-native';
 import {
   SafeAreaView,
   useSafeAreaInsets,
 } from 'react-native-safe-area-context';
 
 import BackButton from '../../src/components/BackButton';
+import AppScrollView from '../../src/components/AppScrollView';
+import FilterSheet, { FilterIconButton } from '../../src/components/FilterSheet';
+import PageLoading from '../../src/components/PageLoading';
 import {
   toCalendarHolidays,
   useHolidayCalendar,
@@ -67,6 +70,7 @@ export default function Events() {
     [isBackendSession, calendarQuery.data, claimContextQuery.data, demoHolidays],
   );
   const [type, setType] = useState<TypeFilter>('all');
+  const [filterOpen, setFilterOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [selected, setSelected] = useState<CalendarHoliday | null>(null);
   /** Approved claim awaiting cancel confirmation. */
@@ -174,10 +178,16 @@ export default function Events() {
 
   return (
     <SafeAreaView edges={['top', 'left', 'right']} className="flex-1 bg-canvas">
-      <BackButton
-        title="Holidays"
-        subtitle="Company holiday calendar"
-      />
+      <View className="flex-row items-start pr-4">
+        <View className="flex-1">
+          <BackButton
+            title="Holidays"
+          />
+        </View>
+        <View className="pt-2">
+          <FilterIconButton onPress={() => setFilterOpen(true)} />
+        </View>
+      </View>
 
       {/* Search */}
       <View className="px-4 pt-2">
@@ -206,50 +216,14 @@ export default function Events() {
         </View>
       </View>
 
-      {/* Type filter */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        className="mt-3 grow-0"
-        contentContainerClassName="gap-2 px-4"
-      >
-        {TYPE_OPTIONS.map((option) => {
-          const active = option.value === type;
-          return (
-            // Matches the Celebrations chips exactly. The elevation that
-            // cardShadow adds was sitting on every inactive chip and swallowing
-            // the tap, so the filter never changed; colours move to inline
-            // styles for the same reason that page does it.
-            <Pressable
-              key={option.value}
-              onPress={() => setType(option.value)}
-              accessibilityRole="button"
-              accessibilityState={{ selected: active }}
-              className="h-8 items-center justify-center rounded-full border px-3.5"
-              style={{
-                backgroundColor: active ? '#14323F' : '#FFFFFF',
-                borderColor: active ? '#14323F' : 'rgba(13, 55, 73, 0.15)',
-              }}
-            >
-              <Text
-                className="text-[13px] font-semibold"
-                style={{ color: active ? '#FFFFFF' : 'rgba(13, 55, 73, 0.65)' }}
-              >
-                {option.label}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </ScrollView>
-
-      <ScrollView
+      <AppScrollView
         className="flex-1"
         contentContainerClassName="px-4 pt-4 gap-5"
         contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}
-        showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
       >
-        {filtered.length === 0 ? (
+        {isBackendSession && (calendarQuery.isPending || claimContextQuery.isPending) ? (
+          <PageLoading label="Loading holidays..." />
+        ) : filtered.length === 0 ? (
           <EmptyState label="No holidays match this filter." />
         ) : (
           <View>
@@ -281,7 +255,7 @@ export default function Events() {
           </View>
         )}
 
-      </ScrollView>
+      </AppScrollView>
 
       <CancelClaimDialog
         holiday={cancelTarget}
@@ -298,6 +272,14 @@ export default function Events() {
         onClaim={claim}
         onCancelClaim={requestCancelClaim}
         onClose={() => setSelected(null)}
+      />
+      <FilterSheet
+        visible={filterOpen}
+        title="Holidays"
+        value={type}
+        options={TYPE_OPTIONS}
+        onChange={setType}
+        onClose={() => setFilterOpen(false)}
       />
     </SafeAreaView>
   );

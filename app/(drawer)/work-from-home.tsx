@@ -34,6 +34,7 @@ import RequestSuccessModal, {
   type SuccessDetail,
 } from '../../src/components/requests/RequestSuccessModal';
 import { useAuth } from '../../src/auth/AuthContext';
+import AppScrollView from '../../src/components/AppScrollView';
 import BackButton from '../../src/components/BackButton';
 import BalanceTile from '../../src/components/leave/BalanceTile';
 import Dropdown from '../../src/components/leave/Dropdown';
@@ -372,11 +373,9 @@ export default function WorkFromHome() {
     <SafeAreaView edges={['top', 'left', 'right']} className="flex-1 bg-canvas">
       <BackButton
         title="Application Details"
-        subtitle="Provide the request type, dates, and supporting details."
-        subtitleNumberOfLines={2}
       />
 
-      <ScrollView
+      <AppScrollView
         ref={scrollRef}
         className="flex-1"
         contentContainerClassName="px-4"
@@ -384,8 +383,6 @@ export default function WorkFromHome() {
           paddingTop: 10,
           paddingBottom: keyboardHeight + insets.bottom + 36,
         }}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
       >
         {/* Allowance tiles — tapping one picks that request type, the same way
             the leave balance tiles work. */}
@@ -532,7 +529,7 @@ export default function WorkFromHome() {
             </View>
           </View>
         </View>
-      </ScrollView>
+      </AppScrollView>
 
       <RequestSuccessModal
         visible={success !== null}

@@ -31,6 +31,7 @@ import {
   useRegularizationEnabled,
 } from '../../src/api/leave';
 import { useAuth } from '../../src/auth/AuthContext';
+import AppScrollView from '../../src/components/AppScrollView';
 import BackButton from '../../src/components/BackButton';
 import Dropdown from '../../src/components/leave/Dropdown';
 import AttachmentField from '../../src/components/requests/AttachmentField';
@@ -514,11 +515,9 @@ export default function Regularize() {
     <SafeAreaView edges={['top', 'left', 'right']} className="flex-1 bg-canvas">
       <BackButton
         title="Regularize request"
-        subtitle="Provide the correct details for the selected date."
-        subtitleNumberOfLines={2}
       />
 
-      <ScrollView
+      <AppScrollView
         ref={scrollRef}
         className="flex-1"
         contentContainerClassName="gap-4 px-4"
@@ -526,8 +525,6 @@ export default function Regularize() {
           paddingTop: 10,
           paddingBottom: keyboardHeight + insets.bottom + 36,
         }}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
       >
         <View className="flex-row gap-3">
           <InfoBox label="This Month" value="3 of 3 left" />
@@ -647,7 +644,7 @@ export default function Regularize() {
             </Pressable>
           </View>
         </View>
-      </ScrollView>
+      </AppScrollView>
 
       <RequestSuccessModal
         visible={success !== null}

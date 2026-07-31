@@ -2,7 +2,7 @@ import { Feather } from '@expo/vector-icons';
 import { DrawerActions } from '@react-navigation/native';
 import { useNavigation, useRouter } from 'expo-router';
 import { useRef, useState } from 'react';
-import { Pressable, Text, TextInput, View } from 'react-native';
+import { Platform, Pressable, Text, TextInput, View } from 'react-native';
 import Animated, {
   Easing,
   interpolate,
@@ -24,6 +24,14 @@ function getGreeting() {
 
 const DURATION = 320;
 const EASING = Easing.inOut(Easing.cubic);
+const WEB_INPUT_RESET =
+  Platform.OS === 'web'
+    ? ({
+        outlineStyle: 'none',
+        outlineWidth: 0,
+        boxShadow: 'none',
+      } as const)
+    : null;
 
 export default function Header() {
   const navigation = useNavigation();
@@ -60,9 +68,8 @@ export default function Header() {
     transform: [{ translateX: interpolate(open.value, [0, 1], [0, -12]) }],
   }));
 
-  // Search bar grows in from the right (width + fade). It's absolutely filling
-  // the flexible middle region, so animating opacity + a slight scale-x reads as
-  // "unrolling" toward the menu.
+  // Search bar grows in from the right. It overlays the header row between the
+  // fixed menu and bell controls, so no sibling width animation can squeeze it.
   const searchStyle = useAnimatedStyle(() => ({
     opacity: interpolate(open.value, [0.35, 1], [0, 1]),
     transform: [
@@ -71,16 +78,12 @@ export default function Header() {
     ],
   }));
 
-  // Only the search-trigger icon fades AND collapses its width, so the field can
-  // extend up to the bell (which stays fixed).
   const searchTriggerStyle = useAnimatedStyle(() => ({
     opacity: interpolate(open.value, [0, 0.5], [1, 0]),
-    width: interpolate(open.value, [0, 1], [44, 0]),
-    marginLeft: interpolate(open.value, [0, 1], [12, 0]),
   }));
 
   return (
-    <View className="h-12 flex-row items-center">
+    <View className="relative h-12 flex-row items-center">
       {/* Menu — fixed on the left. Usable even mid-search: dismisses the
           search bar so the drawer doesn't open over a focused keyboard. */}
       <Pressable
@@ -112,32 +115,6 @@ export default function Header() {
           </Text>
         </Animated.View>
 
-        {searchOpen ? (
-          <Animated.View
-            style={searchStyle}
-            className="absolute inset-x-0 top-0 bottom-0 flex-row items-center rounded-full border border-slate-200 bg-white px-3"
-          >
-            <Feather name="search" size={18} color="#64748B" />
-            <TextInput
-              ref={inputRef}
-              value={query}
-              onChangeText={setQuery}
-              placeholder="Search…"
-              placeholderTextColor="#94A3B8"
-              returnKeyType="search"
-              className="ml-2 flex-1 text-base text-ink"
-            />
-            <Pressable
-              onPress={closeSearch}
-              hitSlop={8}
-              accessibilityRole="button"
-              accessibilityLabel="Close search"
-              className="ml-1 h-7 w-7 items-center justify-center active:opacity-60"
-            >
-              <Feather name="x" size={18} color="#64748B" />
-            </Pressable>
-          </Animated.View>
-        ) : null}
       </View>
 
       {/* Search trigger — collapses away while search is open */}
@@ -170,6 +147,68 @@ export default function Header() {
           <View className="absolute right-2.5 top-2.5 h-2.5 w-2.5 rounded-full border-2 border-canvas bg-gold" />
         ) : null}
       </Pressable>
+
+      {searchOpen ? (
+        <Animated.View
+          style={[
+            searchStyle,
+            {
+              position: 'absolute',
+              left: 56,
+              right: 52,
+              top: 0,
+              bottom: 0,
+              zIndex: 20,
+              height: 48,
+              flexDirection: 'row',
+              alignItems: 'center',
+              borderRadius: 16,
+              borderWidth: 1.5,
+              borderColor: '#CBD5E1',
+              backgroundColor: '#FFFFFF',
+              paddingHorizontal: 12,
+            },
+          ]}
+        >
+          <Feather name="search" size={18} color="#64748B" />
+          <TextInput
+            ref={inputRef}
+            value={query}
+            onChangeText={setQuery}
+            placeholder="Search..."
+            placeholderTextColor="#94A3B8"
+            returnKeyType="search"
+            style={[
+              {
+                marginLeft: 8,
+                height: '100%',
+                minWidth: 0,
+                flex: 1,
+                paddingVertical: 0,
+                fontSize: 16,
+                color: '#14323F',
+              },
+              WEB_INPUT_RESET,
+            ]}
+          />
+          <Pressable
+            onPress={closeSearch}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="Close search"
+            style={{
+              marginLeft: 4,
+              width: 32,
+              height: 32,
+              alignItems: 'center',
+              justifyContent: 'center',
+              borderRadius: 16,
+            }}
+          >
+            <Feather name="x" size={18} color="#64748B" />
+          </Pressable>
+        </Animated.View>
+      ) : null}
     </View>
   );
 }

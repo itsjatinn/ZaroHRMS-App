@@ -5,7 +5,14 @@ import {
 } from '@react-navigation/drawer';
 import { usePathname, useRouter } from 'expo-router';
 import { useState, type ReactNode } from 'react';
-import { ActivityIndicator, Image, Pressable, Text, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Image,
+  Pressable,
+  Text,
+  View,
+  useWindowDimensions,
+} from 'react-native';
 import { Alert } from './CrossAlert';
 
 import { useMyProfile } from '../api/profile';
@@ -23,24 +30,26 @@ const NAVY = '#14323F';
 type MenuItem = {
   label: string;
   route: string;
-  icon: (color: string) => ReactNode;
+  icon: (color: string, size: number) => ReactNode;
 };
 
 const MENU: MenuItem[] = [
   {
     label: 'Holidays',
     route: '/events',
-    icon: (c) => <Feather name="calendar" size={20} color={c} />,
+    icon: (c, size) => <Feather name="calendar" size={size} color={c} />,
   },
   {
     label: 'Celebrations',
     route: '/celebrations',
-    icon: (c) => <Ionicons name="gift-outline" size={20} color={c} />,
+    icon: (c, size) => <Ionicons name="gift-outline" size={size} color={c} />,
   },
   {
     label: 'Announcements',
     route: '/announcements',
-    icon: (c) => <Ionicons name="megaphone-outline" size={20} color={c} />,
+    icon: (c, size) => (
+      <Ionicons name="megaphone-outline" size={size} color={c} />
+    ),
   },
   // Support and Settings are hidden for now — both routes still exist, so
   // restoring these entries is all that's needed to bring them back.
@@ -57,6 +66,20 @@ const MENU: MenuItem[] = [
 ];
 
 export default function DrawerContent(props: DrawerContentComponentProps) {
+  const { height, width } = useWindowDimensions();
+  const compact = height < 740 || width < 370;
+  const avatarSize = compact ? 64 : 72;
+  const avatarRadius = compact ? 18 : 20;
+  const cameraSize = compact ? 25 : 27;
+  const contentTop = compact ? 46 : 58;
+  const contentBottom = compact ? 24 : 32;
+  const menuIconSize = compact ? 18 : 19;
+  const menuTextSize = compact ? 15 : 16;
+  const menuRowPaddingY = compact ? 10 : 12;
+  const menuRowPaddingX = compact ? 8 : 10;
+  const menuGap = compact ? 4 : 6;
+  const dividerMargin = compact ? 20 : 24;
+
   // Live identity for the sidebar header — name from the login session, the
   // rest from the profile read. The demo session keeps the sample identity.
   const { isBackendSession, user, signOut } = useAuth();
@@ -68,7 +91,7 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
         {
           label: 'My Team',
           route: '/my-team',
-          icon: (c) => <Feather name="users" size={20} color={c} />,
+          icon: (c, size) => <Feather name="users" size={size} color={c} />,
         },
         ...MENU,
       ]
@@ -114,16 +137,30 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
     <DrawerContentScrollView
       {...props}
       style={{ backgroundColor: NAVY }}
-      contentContainerStyle={{ flexGrow: 1, paddingTop: 80, paddingBottom: 40 }}
+      contentContainerStyle={{
+        flexGrow: 1,
+        paddingTop: contentTop,
+        paddingBottom: contentBottom,
+      }}
     >
-      <View className="flex-1 px-5">
+      <View className="flex-1 px-4">
         {/* Top section: profile + menu */}
         <View>
           {/* Centered profile section */}
           <View className="items-center">
             {/* Profile photo with yellow outline + camera button */}
-            <View className="relative h-20 w-20">
-              <View className="h-20 w-20 overflow-hidden rounded-2xl border-2 border-[#F5D14E]">
+            <View
+              className="relative"
+              style={{ width: avatarSize, height: avatarSize }}
+            >
+              <View
+                className="overflow-hidden border-2 border-[#F5D14E]"
+                style={{
+                  width: avatarSize,
+                  height: avatarSize,
+                  borderRadius: avatarRadius,
+                }}
+              >
                 {identity.avatar ? (
                   <Image
                     source={{ uri: identity.avatar }}
@@ -131,7 +168,10 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
                   />
                 ) : (
                   <View className="h-full w-full items-center justify-center bg-white/10">
-                    <Text className="text-2xl font-bold text-white">
+                    <Text
+                      className="font-bold text-white"
+                      style={{ fontSize: compact ? 21 : 23 }}
+                    >
                       {getInitials(identity.name, user?.email)}
                     </Text>
                   </View>
@@ -147,19 +187,29 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
                 disabled={savePhoto.isPending}
                 accessibilityRole="button"
                 accessibilityLabel="Change profile photo"
-                className="absolute -bottom-1 -right-1 h-7 w-7 items-center justify-center rounded-full border-2 border-[#14323F] bg-[#F5D14E] active:scale-95"
+                className="absolute -bottom-1 -right-1 items-center justify-center rounded-full border-2 border-[#14323F] bg-[#F5D14E] active:scale-95"
+                style={{ width: cameraSize, height: cameraSize }}
               >
-                <Feather name="camera" size={13} color={NAVY} />
+                <Feather name="camera" size={compact ? 12 : 13} color={NAVY} />
               </Pressable>
             </View>
 
             {/* Name + employee id pill */}
-            <Text className="mt-4 text-2xl font-bold text-white">
+            <Text
+              className="mt-4 font-bold text-white"
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              style={{ fontSize: compact ? 21 : 23 }}
+            >
               {identity.name}
             </Text>
             {identity.subtitle ? (
-              <View className="mt-2 rounded-full bg-white/10 px-3 py-1">
-                <Text className="text-xs text-white/80" numberOfLines={1}>
+              <View className="mt-2 max-w-full rounded-full bg-white/10 px-3 py-1">
+                <Text
+                  className="text-white/80"
+                  numberOfLines={1}
+                  style={{ fontSize: compact ? 11 : 12 }}
+                >
                   {identity.subtitle}
                 </Text>
               </View>
@@ -173,18 +223,21 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
               }}
               className="mt-4 flex-row items-center gap-1"
             >
-              <Text className="text-xs font-semibold uppercase tracking-wide text-[#F5D14E] underline">
+              <Text
+                className="font-semibold uppercase tracking-wide text-[#F5D14E] underline"
+                style={{ fontSize: compact ? 11 : 12 }}
+              >
                 View profile
               </Text>
-              <Feather name="external-link" size={13} color={YELLOW} />
+              <Feather name="external-link" size={compact ? 12 : 13} color={YELLOW} />
             </Pressable>
           </View>
 
           {/* Divider below profile section */}
-          <View className="my-6 h-px bg-white/10" />
+          <View className="h-px bg-white/10" style={{ marginVertical: dividerMargin }} />
 
           {/* Menu items */}
-          <View className="gap-2">
+          <View style={{ gap: menuGap }}>
             {menu.map((item) => {
               const isActive = pathname === item.route;
               const tint = isActive ? NAVY : '#FFFFFF';
@@ -195,20 +248,30 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
                     props.navigation.closeDrawer();
                     router.push(item.route);
                   }}
-                  className={`flex-row items-center gap-4 rounded-2xl px-4 py-3.5 ${
+                  className={`flex-row items-center gap-3 rounded-2xl ${
                     isActive ? 'bg-[#F5D14E]' : 'active:bg-white/10'
                   }`}
+                  style={{
+                    paddingHorizontal: menuRowPaddingX,
+                    paddingVertical: menuRowPaddingY,
+                  }}
                 >
-                  {item.icon(tint)}
+                  <View className="w-7 items-center">
+                    {item.icon(tint, menuIconSize)}
+                  </View>
                   <Text
-                    className={`flex-1 text-lg ${
+                    className={`flex-1 ${
                       isActive ? 'font-semibold text-[#16202E]' : 'text-white'
                     }`}
+                    numberOfLines={1}
+                    adjustsFontSizeToFit
+                    minimumFontScale={0.72}
+                    style={{ fontSize: menuTextSize }}
                   >
                     {item.label}
                   </Text>
                   {isActive && (
-                    <Feather name="chevron-right" size={20} color={NAVY} />
+                    <Feather name="chevron-right" size={menuIconSize} color={NAVY} />
                   )}
                 </Pressable>
               );
@@ -224,10 +287,18 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
           <View className="mb-4 h-px bg-white/10" />
           <Pressable
             onPress={() => void signOut()}
-            className="mb-2 flex-row items-center gap-4 rounded-2xl px-4 py-3.5 active:bg-white/10"
+            className="mb-2 flex-row items-center gap-3 rounded-2xl active:bg-white/10"
+            style={{
+              paddingHorizontal: menuRowPaddingX,
+              paddingVertical: menuRowPaddingY,
+            }}
           >
-            <Feather name="log-out" size={20} color="#FFFFFF" />
-            <Text className="text-lg text-white">Sign out</Text>
+            <View className="w-7 items-center">
+              <Feather name="log-out" size={menuIconSize} color="#FFFFFF" />
+            </View>
+            <Text className="text-white" style={{ fontSize: menuTextSize }}>
+              Sign out
+            </Text>
           </Pressable>
         </View>
       </View>

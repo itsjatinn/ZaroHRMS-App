@@ -1,5 +1,5 @@
 import { useRouter } from 'expo-router';
-import { Bell, ChevronLeft, MapPin, Plus, RotateCcw } from 'lucide-react-native';
+import { Bell, ChevronLeft } from 'lucide-react-native';
 import { useMemo, useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -10,6 +10,9 @@ import {
   useMyRequests,
 } from '../../../src/api/leave';
 import { useAuth } from '../../../src/auth/AuthContext';
+import AppScrollView from '../../../src/components/AppScrollView';
+import FilterSheet, { FilterIconButton } from '../../../src/components/FilterSheet';
+import PageLoading from '../../../src/components/PageLoading';
 import BalanceTile, {
   TILE_GAP,
   TILE_WIDTH,
@@ -57,6 +60,7 @@ export default function LeaveOverviewScreen() {
   const unreadCount = useUnreadCount();
   const { isBackendSession } = useAuth();
   const [filter, setFilter] = useState<Filter>('All');
+  const [filterOpen, setFilterOpen] = useState(false);
   const cancelRequest = useCancelMyRequest();
   const [cancelTarget, setCancelTarget] = useState<Request | null>(null);
 
@@ -117,10 +121,9 @@ export default function LeaveOverviewScreen() {
 
   return (
     <SafeAreaView edges={['top', 'left', 'right']} className="flex-1 bg-canvas">
-      <ScrollView
+      <AppScrollView
         className="flex-1"
         contentContainerClassName="pb-32"
-        showsVerticalScrollIndicator={false}
       >
         {/* Header — mirrors the shared BackButton styling, with a trailing
             notification bell unique to the overview. */}
@@ -133,11 +136,11 @@ export default function LeaveOverviewScreen() {
             <ChevronLeft size={22} color="#14323F" />
           </Pressable>
           <View className="flex-1">
-            <Text className="text-[18px] font-bold leading-6 text-ink" numberOfLines={1}>
+            <Text
+              className="text-center text-[18px] font-bold leading-6 text-ink"
+              numberOfLines={1}
+            >
               My Leave
-            </Text>
-            <Text className="text-xs leading-4 text-slate-400" numberOfLines={1}>
-              Balances, requests & regularizations
             </Text>
           </View>
           <Pressable
@@ -170,20 +173,17 @@ export default function LeaveOverviewScreen() {
           ))}
         </ScrollView>
 
-        {/* Apply actions — label left, compact actions right, softly
-            highlighted with the brand gold so the section stands out without
-            breaking the page's monochrome language. */}
-        <View className="mx-4 mt-4 flex-row items-center gap-3 rounded-2xl border border-gold/40 bg-gold/10 p-3">
+        {/* Apply actions */}
+        <View className="mx-4 mt-4 gap-3 rounded-2xl border border-gold/40 bg-gold/10 p-3">
           <Text className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
             Apply
           </Text>
-          <View className="flex-1 flex-row justify-end gap-2">
+          <View className="flex-row gap-2">
             <Pressable
               onPress={() => router.push('/apply-leave')}
               style={cardShadow}
-              className="h-12 flex-row items-center justify-center gap-1.5 rounded-xl border border-transparent bg-ink px-2.5 active:scale-[0.98] active:bg-ink/90"
+              className="h-12 flex-1 items-center justify-center rounded-xl border border-transparent bg-ink px-2 active:scale-[0.98] active:bg-ink/90"
             >
-              <Plus size={16} color="#FFFFFF" strokeWidth={2.5} />
               <Text numberOfLines={1} className="text-sm font-bold text-white">
                 Leave
               </Text>
@@ -191,21 +191,24 @@ export default function LeaveOverviewScreen() {
             <Pressable
               onPress={() => router.push('/regularize')}
               style={cardShadow}
-              className="h-12 flex-shrink flex-row items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white px-2.5 active:scale-[0.98] active:bg-slate-50"
+              className="h-12 flex-1 items-center justify-center rounded-xl border border-slate-200 bg-white px-2 active:scale-[0.98] active:bg-slate-50"
             >
-              <RotateCcw size={15} color="#14323F" strokeWidth={2.25} />
-              <Text numberOfLines={1} className="text-sm font-bold text-ink">
+              <Text
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.72}
+                className="text-sm font-bold text-ink"
+              >
                 Regularize
               </Text>
             </Pressable>
             <Pressable
               onPress={() => router.push('/work-from-home')}
               style={cardShadow}
-              className="h-12 flex-row items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white px-2.5 active:scale-[0.98] active:bg-slate-50"
+              className="h-12 flex-1 items-center justify-center rounded-xl border border-slate-200 bg-white px-2 active:scale-[0.98] active:bg-slate-50"
             >
-              <MapPin size={15} color="#14323F" strokeWidth={2.25} />
               <Text numberOfLines={1} className="text-sm font-bold text-ink">
-                WFH/WO
+                WFH/OD
               </Text>
             </Pressable>
           </View>
@@ -216,48 +219,19 @@ export default function LeaveOverviewScreen() {
           <Text className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
             Requests
           </Text>
-          <Pressable hitSlop={8} onPress={() => router.push('/requests')}>
-            <Text className="text-sm font-bold text-ink">View all</Text>
-          </Pressable>
+          <View className="flex-row items-center gap-3">
+            <FilterIconButton onPress={() => setFilterOpen(true)} />
+            <Pressable hitSlop={8} onPress={() => router.push('/requests')}>
+              <Text className="text-sm font-bold text-ink">View all</Text>
+            </Pressable>
+          </View>
         </View>
-
-        {/* Status filter — scrolls, since there are seven of them */}
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          className="grow-0"
-          contentContainerClassName="gap-2 px-4"
-        >
-          {FILTERS.map((f) => {
-            const active = filter === f;
-            const count = f === 'All' ? null : counts[f];
-            return (
-              <Pressable
-                key={f}
-                onPress={() => setFilter(f)}
-                accessibilityRole="button"
-                accessibilityState={{ selected: active }}
-                className="h-8 items-center justify-center rounded-full border px-3.5"
-                style={{
-                  backgroundColor: active ? '#14323F' : '#FFFFFF',
-                  borderColor: active ? '#14323F' : 'rgba(13, 55, 73, 0.15)',
-                }}
-              >
-                <Text
-                  className="text-[13px] font-semibold"
-                  style={{ color: active ? '#FFFFFF' : 'rgba(13, 55, 73, 0.65)' }}
-                >
-                  {f}
-                  {count ? ` · ${count}` : ''}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </ScrollView>
 
         {/* Request list */}
         <View className="gap-4 px-4 pt-4">
-          {visible.map((r) => (
+          {isBackendSession && requestsQuery.isPending ? (
+            <PageLoading label="Loading leave..." />
+          ) : visible.map((r) => (
             <RequestCard
               key={r.id}
               type={r.type}
@@ -279,7 +253,7 @@ export default function LeaveOverviewScreen() {
             />
           ))}
         </View>
-      </ScrollView>
+      </AppScrollView>
 
       <CancelLeaveDialog
         request={cancelTarget}
@@ -289,6 +263,18 @@ export default function LeaveOverviewScreen() {
           if (!isBackendSession) return;
           cancelRequest.mutate({ id: request.id, reason });
         }}
+      />
+      <FilterSheet
+        visible={filterOpen}
+        title="Leave requests"
+        value={filter}
+        options={FILTERS.map((f) => ({
+          value: f,
+          label: f,
+          count: f === 'All' ? null : counts[f],
+        }))}
+        onChange={setFilter}
+        onClose={() => setFilterOpen(false)}
       />
     </SafeAreaView>
   );

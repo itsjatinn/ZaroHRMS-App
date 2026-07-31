@@ -9,7 +9,7 @@ import {
   User,
 } from 'lucide-react-native';
 import { useState } from 'react';
-import { Image, Pressable, ScrollView, Switch, Text, View } from 'react-native';
+import { Image, Pressable, Switch, Text, View } from 'react-native';
 import { Alert } from '../../src/components/CrossAlert';
 import {
   SafeAreaView,
@@ -18,6 +18,7 @@ import {
 
 import { useAuth } from '../../src/auth/AuthContext';
 import BackButton from '../../src/components/BackButton';
+import AppScrollView from '../../src/components/AppScrollView';
 import SettingsRow, { SectionLabel } from '../../src/components/settings/SettingsRow';
 import { cardShadow } from '../../src/components/shadow';
 import { currentUser } from '../../src/data/currentUser';
@@ -39,11 +40,10 @@ export default function Settings() {
   return (
     <SafeAreaView edges={['top', 'left', 'right']} className="flex-1 bg-canvas">
       <BackButton title="Settings" />
-      <ScrollView
+      <AppScrollView
         className="flex-1"
         contentContainerClassName="p-4 gap-5"
         contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}
-        showsVerticalScrollIndicator={false}
       >
         {/* Profile */}
         <View style={cardShadow} className="flex-row items-center gap-4 rounded-[22px] border border-slate-100 bg-white p-5">
@@ -123,7 +123,7 @@ export default function Settings() {
           <LogOut size={18} color="#E11D48" />
           <Text className="text-sm font-bold text-[#E11D48]">Sign Out</Text>
         </Pressable>
-      </ScrollView>
+      </AppScrollView>
     </SafeAreaView>
   );
 }

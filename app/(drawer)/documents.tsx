@@ -1,4 +1,4 @@
-import { ScrollView, Text } from 'react-native';
+import { Text } from 'react-native';
 import { Alert } from '../../src/components/CrossAlert';
 import {
   SafeAreaView,
@@ -6,6 +6,7 @@ import {
 } from 'react-native-safe-area-context';
 
 import BackButton from '../../src/components/BackButton';
+import AppScrollView from '../../src/components/AppScrollView';
 import DocumentSection from '../../src/components/documents/DocumentSection';
 import { DOCUMENT_SECTIONS } from '../../src/components/documents/documentsData';
 
@@ -16,11 +17,10 @@ export default function Documents() {
   return (
     <SafeAreaView edges={['top', 'left', 'right']} className="flex-1 bg-canvas">
       <BackButton title="Documents" />
-      <ScrollView
+      <AppScrollView
         className="flex-1"
         contentContainerClassName="p-4 gap-5"
         contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}
-        showsVerticalScrollIndicator={false}
       >
         <Text className="text-sm text-slate-400">
           Your personal, payroll, and company documents in one place.
@@ -34,7 +34,7 @@ export default function Documents() {
             onDownload={download}
           />
         ))}
-      </ScrollView>
+      </AppScrollView>
     </SafeAreaView>
   );
 }

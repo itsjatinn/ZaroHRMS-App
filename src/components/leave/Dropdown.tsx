@@ -114,19 +114,6 @@ export default function Dropdown({
       </Pressable>
 
       {open ? (
-        <>
-          {/* Oversized invisible backdrop so tapping anywhere outside closes
-              the menu. Sits under the menu in stacking order. */}
-          <Pressable
-            onPress={closeMenu}
-            style={{
-              position: 'absolute',
-              top: -1000,
-              bottom: -1000,
-              left: -1000,
-              right: -1000,
-            }}
-          />
           <Animated.View
             style={[menuStyle, menuShadow]}
             className="absolute left-0 right-0 top-14 z-50 overflow-hidden rounded-2xl border border-slate-200 bg-white"
@@ -161,7 +148,6 @@ export default function Dropdown({
               })}
             </View>
           </Animated.View>
-        </>
       ) : null}
     </View>
   );

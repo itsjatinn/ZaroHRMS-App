@@ -2,7 +2,6 @@ import { useRouter } from 'expo-router';
 import { BellOff, CheckCheck, Trash2 } from 'lucide-react-native';
 import { useMemo, useState } from 'react';
 import {
-  ActivityIndicator,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -23,6 +22,8 @@ import {
 } from '../../src/api/notifications';
 import { useAuth } from '../../src/auth/AuthContext';
 import BackButton from '../../src/components/BackButton';
+import FilterSheet, { FilterIconButton } from '../../src/components/FilterSheet';
+import PageLoading from '../../src/components/PageLoading';
 import NotificationCard from '../../src/components/notifications/NotificationCard';
 import { DEMO_NOTIFICATIONS } from '../../src/components/notifications/notificationsStore';
 import {
@@ -41,6 +42,7 @@ export default function NotificationsScreen() {
   const gate = useModuleGate(isBackendSession);
 
   const [filter, setFilter] = useState<NotificationFilterId>('all');
+  const [filterOpen, setFilterOpen] = useState(false);
 
   // 'unread' goes to the server; typed groups are filtered client-side from
   // the full feed, exactly as the web does.
@@ -123,76 +125,16 @@ export default function NotificationsScreen() {
 
   return (
     <SafeAreaView edges={['top', 'left', 'right']} className="flex-1 bg-canvas">
-      <BackButton
-        title="Notifications"
-        subtitle={unreadCount > 0 ? `${unreadCount} unread` : 'You’re all caught up'}
-      />
-
-      {/* Filter spine — scrolls, and only shows licensed groups. */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        className="mt-2 grow-0"
-        contentContainerClassName="gap-2 px-4"
-      >
-        {availableFilters.map((entry) => {
-          const active = entry.id === filter;
-          const Icon = entry.icon;
-          return (
-            <Pressable
-              key={entry.id}
-              onPress={() => setFilter(entry.id)}
-              accessibilityRole="button"
-              accessibilityState={{ selected: active }}
-              className="h-8 flex-row items-center gap-1.5 rounded-full border px-3.5"
-              style={{
-                backgroundColor: active ? '#14323F' : '#FFFFFF',
-                borderColor: active ? '#14323F' : 'rgba(13, 55, 73, 0.15)',
-              }}
-            >
-              <Icon
-                size={13}
-                color={active ? '#FFFFFF' : 'rgba(13,55,73,0.65)'}
-              />
-              <Text
-                className="text-[13px] font-semibold"
-                style={{ color: active ? '#FFFFFF' : 'rgba(13, 55, 73, 0.65)' }}
-              >
-                {entry.label}
-                {entry.id === 'unread' && unreadCount > 0
-                  ? ` · ${unreadCount}`
-                  : ''}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </ScrollView>
-
-      {/* Bulk actions */}
-      {items.length > 0 ? (
-        <View className="mt-3 flex-row gap-2 px-4">
-          {unreadCount > 0 ? (
-            <Pressable
-              onPress={() => isBackendSession && markAllRead.mutate(undefined)}
-              accessibilityRole="button"
-              className="h-9 flex-1 flex-row items-center justify-center gap-1.5 rounded-[10px] border border-slate-200 bg-white active:opacity-70"
-            >
-              <CheckCheck size={14} color="#14323F" />
-              <Text className="text-[13px] font-bold text-ink">
-                Mark all read
-              </Text>
-            </Pressable>
-          ) : null}
-          <Pressable
-            onPress={confirmClearAll}
-            accessibilityRole="button"
-            className="h-9 flex-1 flex-row items-center justify-center gap-1.5 rounded-[10px] border border-rose-200 bg-white active:opacity-70"
-          >
-            <Trash2 size={14} color="#F43F5E" />
-            <Text className="text-[13px] font-bold text-rose-500">Clear all</Text>
-          </Pressable>
+      <View className="flex-row items-start pr-4">
+        <View className="flex-1">
+          <BackButton
+            title="Notifications"
+          />
         </View>
-      ) : null}
+        <View className="pt-2">
+          <FilterIconButton onPress={() => setFilterOpen(true)} />
+        </View>
+      </View>
 
       <ScrollView
         className="flex-1"
@@ -209,35 +151,54 @@ export default function NotificationsScreen() {
         }
       >
         {isBackendSession && feed.isPending ? (
-          <View className="items-center gap-3 py-16">
-            <ActivityIndicator color="rgba(13,55,73,0.4)" />
-            <Text className="text-sm text-slate-400">
-              Loading your notifications…
-            </Text>
-          </View>
+          <PageLoading label="Loading notifications..." />
         ) : grouped.length > 0 ? (
-          grouped.map((section, i) => (
-            <View key={section.day} className={i === 0 ? '' : 'mt-5'}>
-              <Text className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-                {section.day}
-              </Text>
-              <View className="gap-3">
-                {section.items.map((item) => (
-                  <NotificationCard
-                    key={item.id}
-                    item={item}
-                    unread={!item.readAt}
-                    onPress={() => open(item)}
-                    onDelete={
-                      isBackendSession
-                        ? () => deleteOne.mutate(item.id)
-                        : undefined
-                    }
-                  />
-                ))}
+          <>
+            {grouped.map((section, i) => (
+              <View key={section.day} className={i === 0 ? '' : 'mt-5'}>
+                <Text className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                  {section.day}
+                </Text>
+                <View className="gap-3">
+                  {section.items.map((item) => (
+                    <NotificationCard
+                      key={item.id}
+                      item={item}
+                      unread={!item.readAt}
+                      onPress={() => open(item)}
+                      onDelete={
+                        isBackendSession
+                          ? () => deleteOne.mutate(item.id)
+                          : undefined
+                      }
+                    />
+                  ))}
+                </View>
               </View>
+            ))}
+            <View className="mt-6 gap-2">
+              {unreadCount > 0 ? (
+                <Pressable
+                  onPress={() => isBackendSession && markAllRead.mutate(undefined)}
+                  accessibilityRole="button"
+                  className="h-11 flex-row items-center justify-center gap-1.5 rounded-[12px] border border-slate-200 bg-white active:opacity-70"
+                >
+                  <CheckCheck size={15} color="#14323F" />
+                  <Text className="text-[13px] font-bold text-ink">
+                    Mark all read
+                  </Text>
+                </Pressable>
+              ) : null}
+              <Pressable
+                onPress={confirmClearAll}
+                accessibilityRole="button"
+                className="h-11 flex-row items-center justify-center gap-1.5 rounded-[12px] border border-rose-200 bg-white active:opacity-70"
+              >
+                <Trash2 size={15} color="#F43F5E" />
+                <Text className="text-[13px] font-bold text-rose-500">Clear all</Text>
+              </Pressable>
             </View>
-          ))
+          </>
         ) : (
           <View className="mt-24 items-center gap-3">
             <View className="h-16 w-16 items-center justify-center rounded-full bg-slate-100">
@@ -254,6 +215,22 @@ export default function NotificationsScreen() {
           </View>
         )}
       </ScrollView>
+      <FilterSheet
+        visible={filterOpen}
+        title="Notifications"
+        value={filter}
+        options={availableFilters.map((entry) => {
+          const Icon = entry.icon;
+          return {
+            value: entry.id,
+            label: entry.label,
+            count: entry.id === 'unread' ? unreadCount : null,
+            icon: (color: string) => <Icon size={16} color={color} />,
+          };
+        })}
+        onChange={setFilter}
+        onClose={() => setFilterOpen(false)}
+      />
     </SafeAreaView>
   );
 }

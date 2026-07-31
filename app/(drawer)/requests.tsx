@@ -1,11 +1,14 @@
 import { useRouter } from 'expo-router';
 import { CalendarX, ChevronLeft } from 'lucide-react-native';
 import { useMemo, useState } from 'react';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 import { Alert } from '../../src/components/CrossAlert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import Dropdown from '../../src/components/leave/Dropdown';
+import AppScrollView from '../../src/components/AppScrollView';
+import FilterSheet, { FilterIconButton } from '../../src/components/FilterSheet';
+import PageLoading from '../../src/components/PageLoading';
 import RequestCard from '../../src/components/leave/RequestCard';
 import { useCancelMyRequest, useMyRequests } from '../../src/api/leave';
 import { useAuth } from '../../src/auth/AuthContext';
@@ -57,6 +60,7 @@ export default function AllRequestsScreen() {
   const requestsQuery = useMyRequests(isBackendSession);
   const cancelRequest = useCancelMyRequest();
   const [filter, setFilter] = useState<Filter>('All');
+  const [filterOpen, setFilterOpen] = useState(false);
   const [year, setYear] = useState<string>('2026');
   const [cancelTarget, setCancelTarget] = useState<Request | null>(null);
   /**
@@ -151,11 +155,11 @@ export default function AllRequestsScreen() {
           <ChevronLeft size={22} color="#14323F" />
         </Pressable>
         <View className="min-w-0 flex-1">
-          <Text className="text-[18px] font-bold leading-6 text-ink" numberOfLines={1}>
+          <Text
+            className="text-center text-[18px] font-bold leading-6 text-ink"
+            numberOfLines={1}
+          >
             Leave Requests
-          </Text>
-          <Text className="text-xs leading-4 text-slate-400" numberOfLines={1}>
-            {counts.All} total · {counts.Pending} pending
           </Text>
         </View>
         <Dropdown
@@ -175,44 +179,17 @@ export default function AllRequestsScreen() {
         <SummaryChip value={counts.Rejected} label="Rejected" />
       </View>
 
-      {/* Status filter — scrolls, since there are seven of them */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        className="mt-4 grow-0"
-        contentContainerClassName="gap-2 px-4"
-      >
-        {FILTERS.map((f) => {
-          const active = filter === f;
-          return (
-            <Pressable
-              key={f}
-              onPress={() => setFilter(f)}
-              accessibilityRole="button"
-              accessibilityState={{ selected: active }}
-              className="h-8 items-center justify-center rounded-full border px-3.5"
-              style={{
-                backgroundColor: active ? '#14323F' : '#FFFFFF',
-                borderColor: active ? '#14323F' : 'rgba(13, 55, 73, 0.15)',
-              }}
-            >
-              <Text
-                className="text-[13px] font-semibold"
-                style={{ color: active ? '#FFFFFF' : 'rgba(13, 55, 73, 0.65)' }}
-              >
-                {f}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </ScrollView>
+      <View className="mt-4 flex-row justify-end px-4">
+        <FilterIconButton onPress={() => setFilterOpen(true)} />
+      </View>
 
-      <ScrollView
+      <AppScrollView
         className="flex-1"
         contentContainerClassName="px-4 pb-32 pt-4"
-        showsVerticalScrollIndicator={false}
       >
-        {grouped.length > 0 ? (
+        {isBackendSession && requestsQuery.isPending ? (
+          <PageLoading label="Loading requests..." />
+        ) : grouped.length > 0 ? (
           grouped.map((section, i) => (
             <View key={`${section.month}-${i}`} className={i === 0 ? '' : 'mt-5'}>
               <Text className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
@@ -255,11 +232,19 @@ export default function AllRequestsScreen() {
             </Text>
           </View>
         )}
-      </ScrollView>
+      </AppScrollView>
       <CancelLeaveDialog
         request={cancelTarget}
         onKeep={() => setCancelTarget(null)}
         onConfirm={confirmCancel}
+      />
+      <FilterSheet
+        visible={filterOpen}
+        title="Requests"
+        value={filter}
+        options={FILTERS.map((f) => ({ value: f, label: f }))}
+        onChange={setFilter}
+        onClose={() => setFilterOpen(false)}
       />
     </SafeAreaView>
   );

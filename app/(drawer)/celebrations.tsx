@@ -1,6 +1,6 @@
 import { Sparkles } from 'lucide-react-native';
 import { useMemo, useState } from 'react';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 import { Alert } from '../../src/components/CrossAlert';
 import {
   SafeAreaView,
@@ -15,6 +15,9 @@ import {
 } from '../../src/api/celebrations';
 import { useAuth } from '../../src/auth/AuthContext';
 import BackButton from '../../src/components/BackButton';
+import AppScrollView from '../../src/components/AppScrollView';
+import FilterSheet, { FilterIconButton } from '../../src/components/FilterSheet';
+import PageLoading from '../../src/components/PageLoading';
 import CelebrationCard from '../../src/components/celebrations/CelebrationCard';
 import {
   BRAND_PRIMARY,
@@ -37,6 +40,7 @@ export default function Celebrations() {
   const { isBackendSession } = useAuth();
 
   const [kind, setKind] = useState<KindFilter>('all');
+  const [filterOpen, setFilterOpen] = useState(false);
   const [composing, setComposing] = useState<Celebration | null>(null);
   /** Occasions wished this session — merged with the server's `wished` flag. */
   const [justWished, setJustWished] = useState<Set<string>>(() => new Set());
@@ -128,50 +132,26 @@ export default function Celebrations() {
 
   return (
     <SafeAreaView edges={['top', 'left', 'right']} className="flex-1 bg-canvas">
-      <BackButton
-        title="Celebrations"
-        subtitle="Birthdays, anniversaries, and new joiners across your team"
-      />
+      <View className="flex-row items-start pr-4">
+        <View className="flex-1">
+          <BackButton
+            title="Celebrations"
+          />
+        </View>
+        <View className="pt-2">
+          <FilterIconButton onPress={() => setFilterOpen(true)} />
+        </View>
+      </View>
 
-      {/* Slideable type filter — kept outside the vertical ScrollView; the
-          nested horizontal-in-vertical ScrollView combination swallows taps
-          under the new architecture. */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        className="mt-2 grow-0"
-        contentContainerClassName="gap-2 px-4"
-      >
-        {KIND_OPTIONS.map((opt) => {
-          const active = opt.value === kind;
-          return (
-            <Pressable
-              key={opt.value}
-              onPress={() => setKind(opt.value)}
-              className="h-8 items-center justify-center rounded-full border px-3.5"
-              style={{
-                backgroundColor: active ? BRAND_PRIMARY : '#FFFFFF',
-                borderColor: active ? BRAND_PRIMARY : brandAlpha(0.15),
-              }}
-            >
-              <Text
-                className="text-[13px] font-semibold"
-                style={{ color: active ? '#FFFFFF' : brandAlpha(0.65) }}
-              >
-                {opt.label}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </ScrollView>
-
-      <ScrollView
+      <AppScrollView
         className="flex-1"
         contentContainerClassName="px-4 pt-4 gap-5"
         contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}
-        showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
       >
+        {isBackendSession && celebrationsQuery.isPending ? (
+          <PageLoading label="Loading celebrations..." />
+        ) : (
+          <>
 
         {/* Today — label on the canvas, no wrapper panel. The cards carry a
             kind-coloured border instead, so they still stand out. */}
@@ -275,12 +255,22 @@ export default function Celebrations() {
             </View>
           )}
         </View>
-      </ScrollView>
+          </>
+        )}
+      </AppScrollView>
 
       <WishComposerSheet
         celebration={composing}
         onSend={sendWish}
         onClose={() => setComposing(null)}
+      />
+      <FilterSheet
+        visible={filterOpen}
+        title="Celebrations"
+        value={kind}
+        options={KIND_OPTIONS}
+        onChange={setKind}
+        onClose={() => setFilterOpen(false)}
       />
     </SafeAreaView>
   );

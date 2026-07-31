@@ -1,7 +1,7 @@
 import { Feather } from '@expo/vector-icons';
 import { Redirect } from 'expo-router';
 import { useMemo, useState } from 'react';
-import { LayoutAnimation, Platform, Pressable, ScrollView, Text, TextInput, UIManager, View } from 'react-native';
+import { LayoutAnimation, Platform, Pressable, Text, TextInput, UIManager, View } from 'react-native';
 import { Alert } from '../../../src/components/CrossAlert';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -11,6 +11,9 @@ import {
 } from '../../../src/api/approvals';
 import { useAuth } from '../../../src/auth/AuthContext';
 import BackButton from '../../../src/components/BackButton';
+import AppScrollView from '../../../src/components/AppScrollView';
+import FilterSheet, { FilterIconButton } from '../../../src/components/FilterSheet';
+import PageLoading from '../../../src/components/PageLoading';
 import {
   INITIAL_APPROVALS,
   STATUS_FILTERS,
@@ -209,6 +212,7 @@ export default function ApprovalsScreen() {
   }, [isBackendSession, queueQuery.data, decidedLocally, demoRequests]);
   const [type, setType] = useState<(typeof TYPE_FILTERS)[number]>('All types');
   const [status, setStatus] = useState<(typeof STATUS_FILTERS)[number]>('Pending');
+  const [filterOpen, setFilterOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
@@ -289,56 +293,30 @@ export default function ApprovalsScreen() {
     <SafeAreaView edges={['top', 'left', 'right']} className="flex-1 bg-canvas">
       <BackButton
         title="Approvals"
-        subtitle="Leave, regularization, comp-off and optional-holiday requests waiting on you"
-        subtitleNumberOfLines={2}
       />
 
-      <ScrollView
+      <AppScrollView
         className="flex-1"
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: insets.bottom + 112 }}
       >
         <View className="gap-3 px-4 pt-3">
-          <View className="flex-row items-center rounded-xl border border-slate-200 bg-white px-3">
-            <Feather name="search" size={18} color="#94A3B8" />
-            <TextInput
-              value={query}
-              onChangeText={setQuery}
-              placeholder="Search name, summary…"
-              placeholderTextColor="#94A3B8"
-              className="ml-2 h-12 flex-1 text-sm text-ink"
-            />
-            {query ? (
-              <Pressable onPress={() => setQuery('')} hitSlop={8}>
-                <Feather name="x" size={16} color="#94A3B8" />
-              </Pressable>
-            ) : null}
-          </View>
-
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
-            {TYPE_FILTERS.map((item) => (
-              <Pressable
-                key={item}
-                onPress={() => setType(item)}
-                className={`rounded-full border px-4 py-2 ${type === item ? 'border-ink bg-ink' : 'border-slate-200 bg-white'}`}
-              >
-                <Text className={`text-xs font-semibold ${type === item ? 'text-white' : 'text-slate-500'}`}>{item}</Text>
-              </Pressable>
-            ))}
-          </ScrollView>
-
-          <View className="flex-row rounded-xl bg-slate-200/70 p-1">
-            {STATUS_FILTERS.map((item) => (
-              <Pressable
-                key={item}
-                onPress={() => setStatus(item)}
-                className={`flex-1 items-center rounded-lg py-2.5 ${status === item ? 'bg-white' : ''}`}
-                style={status === item ? cardShadow : undefined}
-              >
-                <Text className={`text-[11px] font-semibold ${status === item ? 'text-ink' : 'text-slate-500'}`}>{item}</Text>
-              </Pressable>
-            ))}
+          <View className="flex-row items-center gap-2">
+            <View className="min-w-0 flex-1 flex-row items-center rounded-xl border border-slate-200 bg-white px-3">
+              <Feather name="search" size={18} color="#94A3B8" />
+              <TextInput
+                value={query}
+                onChangeText={setQuery}
+                placeholder="Search name, summary…"
+                placeholderTextColor="#94A3B8"
+                className="ml-2 h-12 flex-1 text-sm text-ink"
+              />
+              {query ? (
+                <Pressable onPress={() => setQuery('')} hitSlop={8}>
+                  <Feather name="x" size={16} color="#94A3B8" />
+                </Pressable>
+              ) : null}
+            </View>
+            <FilterIconButton onPress={() => setFilterOpen(true)} />
           </View>
 
           <View className="mt-1 flex-row items-center justify-between">
@@ -351,7 +329,9 @@ export default function ApprovalsScreen() {
           </View>
 
           <View className="gap-3">
-            {visible.map((request) => (
+            {isBackendSession && queueQuery.isPending ? (
+              <PageLoading label="Loading approvals..." />
+            ) : visible.map((request) => (
               <ApprovalCard
                 key={request.id}
                 request={request}
@@ -360,7 +340,7 @@ export default function ApprovalsScreen() {
                 onDecision={updateDecision}
               />
             ))}
-            {visible.length === 0 ? (
+            {!queueQuery.isPending && visible.length === 0 ? (
               <View className="items-center rounded-2xl border border-slate-200 bg-white px-8 py-12">
                 <View className="h-14 w-14 items-center justify-center rounded-full bg-slate-100">
                   <Feather name="check-circle" size={25} color="#94A3B8" />
@@ -373,7 +353,27 @@ export default function ApprovalsScreen() {
             ) : null}
           </View>
         </View>
-      </ScrollView>
+      </AppScrollView>
+      <FilterSheet
+        visible={filterOpen}
+        title="Approvals"
+        value={status}
+        sections={[
+          {
+            title: 'Type',
+            value: type,
+            options: TYPE_FILTERS.map((item) => ({ value: item, label: item })),
+            onChange: (next) => setType(next as typeof type),
+          },
+          {
+            title: 'Status',
+            value: status,
+            options: STATUS_FILTERS.map((item) => ({ value: item, label: item })),
+            onChange: (next) => setStatus(next as typeof status),
+          },
+        ]}
+        onClose={() => setFilterOpen(false)}
+      />
 
     </SafeAreaView>
   );

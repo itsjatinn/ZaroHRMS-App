@@ -1,8 +1,15 @@
 import { Drawer } from 'expo-router/drawer';
+import { Platform, useWindowDimensions } from 'react-native';
 
 import DrawerContent from '../../src/components/DrawerContent';
 
 export default function DrawerLayout() {
+  const { width } = useWindowDimensions();
+  const drawerWidth =
+    Platform.OS === 'web'
+      ? Math.min(Math.max(width * 0.62, 232), 292)
+      : Math.min(Math.max(width * 0.64, 232), 292);
+
   return (
     <Drawer
       drawerContent={(props) => <DrawerContent {...props} />}
@@ -13,14 +20,9 @@ export default function DrawerLayout() {
         overlayColor: 'transparent',
         drawerStyle: {
           backgroundColor: '#14323F',
-          // 65% lands at ~254px against the 390px design width, which is what
-          // the avatar and menu labels are sized for. The percentage alone is
-          // unbounded though: on a tablet or desktop it becomes a 600px+ panel,
-          // and on a narrow viewport it squeezes below what the fixed-size
-          // contents need. Clamp both ends.
-          width: '65%',
-          minWidth: 240,
-          maxWidth: 320,
+          // Numeric and bounded on every platform: percentage drawers can look
+          // oversized on phones with display scaling and on Expo web.
+          width: drawerWidth,
         },
       }}
     >

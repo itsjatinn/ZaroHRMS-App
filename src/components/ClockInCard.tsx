@@ -208,7 +208,7 @@ export default function ClockInCard() {
   const time = `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
 
   const statusLabel = isClosedForDay
-    ? 'Punched out for the day'
+    ? 'Punched out'
     : isPunchedIn
       ? 'Currently punched in'
       : 'Not punched in yet';
@@ -239,7 +239,17 @@ export default function ClockInCard() {
   const disabled = punch.isPending || isClosedForDay;
 
   return (
-    <View style={PUNCH_CARD_SHADOW} className="rounded-3xl bg-[#14323F] p-6">
+    <View style={PUNCH_CARD_SHADOW} className="relative rounded-3xl bg-[#14323F] px-5 py-4">
+      {isClosedForDay && (inStamp || outStamp) ? (
+        <View className="absolute right-5 top-4 items-end">
+          <Text className="text-[10px] font-semibold uppercase tracking-wide text-white/40">
+            Worked today
+          </Text>
+          <Text className="text-sm font-bold text-white">
+            {formatDuration(workedMs)}
+          </Text>
+        </View>
+      ) : null}
       <View className="flex-row items-center">
         {/* Left: date, status, time */}
         <View className="flex-1 pr-4">
@@ -248,8 +258,8 @@ export default function ClockInCard() {
           </Text>
 
           {/* Status pill */}
-          <View className="mt-3 flex-row">
-            <View className="flex-row items-center gap-2 rounded-full bg-white/10 px-3 py-1.5">
+          <View className="mt-2 flex-row">
+            <View className="flex-row items-center gap-2 rounded-full bg-white/10 px-3 py-1">
               <View
                 className="h-2 w-2 rounded-full"
                 style={{
@@ -267,16 +277,16 @@ export default function ClockInCard() {
           </View>
 
           {/* Live time */}
-          <View className="mt-4 flex-row items-center gap-2">
-            <Feather name="clock" size={20} color={YELLOW} />
-            <Text className="text-4xl font-bold tracking-tight text-white">
+          <View className="mt-3 flex-row items-center gap-2">
+            <Feather name="clock" size={18} color={YELLOW} />
+            <Text className="text-[32px] font-bold tracking-tight text-white">
               {time}
             </Text>
           </View>
 
           {/* Night-shift hints */}
           {overnightOpen && day?.businessDate ? (
-            <View className="mt-3 flex-row items-center gap-1.5">
+            <View className="mt-2 flex-row items-center gap-1.5">
               <Feather name="moon" size={12} color="#94A3B8" />
               <Text className="text-xs text-white/50">
                 Night shift — started {formatDisplayDate(day.businessDate)}
@@ -284,7 +294,7 @@ export default function ClockInCard() {
             </View>
           ) : null}
           {showShiftWindow && shift ? (
-            <View className="mt-3 flex-row items-center gap-1.5">
+            <View className="mt-2 flex-row items-center gap-1.5">
               <Feather name="moon" size={12} color="#94A3B8" />
               <Text className="text-xs text-white/50">
                 {shift.startTime} – {shift.endTime} (+1)
@@ -294,14 +304,42 @@ export default function ClockInCard() {
 
           {/* Today's stamps — each only when its timestamp exists. */}
           {inStamp || outStamp ? (
-            <View className="mt-3 gap-1.5">
+            <View
+              className={`mt-2 ${
+                isClosedForDay && inStamp && outStamp
+                  ? 'flex-row gap-4'
+                  : 'gap-1'
+              }`}
+            >
               {inStamp ? (
-                <View className="flex-row flex-wrap items-center gap-2">
-                  <Feather name="log-in" size={12} color={GREEN} />
-                  <Text className="text-xs text-white/60">
-                    Punched in{' '}
-                    <Text className="font-bold text-white">{inStamp}</Text>
-                  </Text>
+                <View
+                  className={
+                    isClosedForDay && outStamp
+                      ? 'min-w-0 flex-1 gap-1'
+                      : 'flex-row flex-wrap items-center gap-2'
+                  }
+                >
+                  <View
+                    className={
+                      isClosedForDay && outStamp
+                        ? 'items-start gap-0.5'
+                        : 'flex-row items-center gap-2'
+                    }
+                  >
+                    <View className="flex-row items-center gap-2">
+                    <Feather name="log-in" size={12} color={GREEN} />
+                    <Text className="text-xs text-white/60">
+                      Punched in
+                    </Text>
+                    </View>
+                    {isClosedForDay && outStamp ? (
+                      <Text className="pl-5 text-xs font-bold text-white">
+                        {inStamp}
+                      </Text>
+                    ) : (
+                      <Text className="text-xs font-bold text-white">{inStamp}</Text>
+                    )}
+                  </View>
                   {lateMinutes > 0 ? (
                     <Text className="text-xs font-semibold" style={{ color: RED }}>
                       Late by {formatMinutes(lateMinutes)}
@@ -310,12 +348,34 @@ export default function ClockInCard() {
                 </View>
               ) : null}
               {outStamp ? (
-                <View className="flex-row flex-wrap items-center gap-2">
-                  <Feather name="log-out" size={12} color="#94A3B8" />
-                  <Text className="text-xs text-white/60">
-                    Punched out{' '}
-                    <Text className="font-bold text-white">{outStamp}</Text>
-                  </Text>
+                <View
+                  className={
+                    isClosedForDay && inStamp
+                      ? 'min-w-0 flex-1 gap-1'
+                      : 'flex-row flex-wrap items-center gap-2'
+                  }
+                >
+                  <View
+                    className={
+                      isClosedForDay && inStamp
+                        ? 'items-start gap-0.5'
+                        : 'flex-row items-center gap-2'
+                    }
+                  >
+                    <View className="flex-row items-center gap-2">
+                    <Feather name="log-out" size={12} color="#94A3B8" />
+                    <Text className="text-xs text-white/60">
+                      Punched out
+                    </Text>
+                    </View>
+                    {isClosedForDay && inStamp ? (
+                      <Text className="pl-5 text-xs font-bold text-white">
+                        {outStamp}
+                      </Text>
+                    ) : (
+                      <Text className="text-xs font-bold text-white">{outStamp}</Text>
+                    )}
+                  </View>
                   {earlyExitMinutes > 0 ? (
                     <Text className="text-xs font-semibold" style={{ color: RED }}>
                       Early by {formatMinutes(earlyExitMinutes)}
@@ -328,11 +388,11 @@ export default function ClockInCard() {
 
           {/* The server's own words when a punch is refused. */}
           {punchError ? (
-            <Text className="mt-3 text-sm font-medium" style={{ color: RED }}>
+            <Text className="mt-2 text-sm font-medium" style={{ color: RED }}>
               {punchError}
             </Text>
           ) : !inStamp && !outStamp ? (
-            <Text className="mt-3 text-sm font-medium text-white/50">
+            <Text className="mt-2 text-sm font-medium text-white/50">
               Tap the button to punch in.
             </Text>
           ) : null}
@@ -340,8 +400,8 @@ export default function ClockInCard() {
 
         {/* Right: worked counter + dashed ring + punch button */}
         <View className="items-center">
-          {inStamp || outStamp ? (
-            <View className="mb-2 items-center">
+          {!isClosedForDay && (inStamp || outStamp) ? (
+            <View className="mb-1.5 items-center">
               <Text className="text-[10px] font-semibold uppercase tracking-wide text-white/40">
                 {isPunchedIn ? 'Working' : 'Worked today'}
               </Text>
@@ -350,40 +410,42 @@ export default function ClockInCard() {
               </Text>
             </View>
           ) : null}
-          <View
-            className="items-center justify-center rounded-full p-1"
-            style={{
-              borderWidth: 2,
-              borderColor: 'rgba(255,255,255,0.25)',
-              borderStyle: 'dashed',
-            }}
-          >
-            <Pressable
-              onPress={handlePunch}
-              disabled={disabled}
-              accessibilityRole="button"
-              accessibilityState={{ disabled }}
-              accessibilityLabel={isPunchedIn ? 'Punch out' : 'Punch in'}
-              className="h-28 w-28 items-center justify-center rounded-full active:scale-95"
+          {!isClosedForDay ? (
+            <View
+              className="items-center justify-center rounded-full p-1"
               style={{
-                backgroundColor: isClosedForDay ? '#94A3B8' : YELLOW,
-                opacity: disabled && !isClosedForDay ? 0.7 : 1,
+                borderWidth: 2,
+                borderColor: 'rgba(255,255,255,0.25)',
+                borderStyle: 'dashed',
               }}
             >
-              {punch.isPending ? (
-                <ActivityIndicator color={NAVY} />
-              ) : (
-                <MaterialCommunityIcons
-                  name={isClosedForDay ? 'check' : 'fingerprint'}
-                  size={40}
-                  color={NAVY}
-                />
-              )}
-              <Text className="mt-1 text-xs font-extrabold tracking-wide text-[#14323F]">
-                {buttonLabel}
-              </Text>
-            </Pressable>
-          </View>
+              <Pressable
+                onPress={handlePunch}
+                disabled={disabled}
+                accessibilityRole="button"
+                accessibilityState={{ disabled }}
+                accessibilityLabel={isPunchedIn ? 'Punch out' : 'Punch in'}
+                className="h-24 w-24 items-center justify-center rounded-full active:scale-95"
+                style={{
+                  backgroundColor: YELLOW,
+                  opacity: disabled ? 0.7 : 1,
+                }}
+              >
+                {punch.isPending ? (
+                  <ActivityIndicator color={NAVY} />
+                ) : (
+                  <MaterialCommunityIcons
+                    name="fingerprint"
+                    size={34}
+                    color={NAVY}
+                  />
+                )}
+                <Text className="mt-0.5 text-[11px] font-extrabold tracking-wide text-[#14323F]">
+                  {buttonLabel}
+                </Text>
+              </Pressable>
+            </View>
+          ) : null}
         </View>
       </View>
 

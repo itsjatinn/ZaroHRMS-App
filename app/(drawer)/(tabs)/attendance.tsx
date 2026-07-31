@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ScrollView, View } from 'react-native';
+import { View } from 'react-native';
 import {
   SafeAreaView,
   useSafeAreaInsets,
 } from 'react-native-safe-area-context';
 
 import BackButton from '../../../src/components/BackButton';
+import AppScrollView from '../../../src/components/AppScrollView';
 import AttendanceCalendarCard from '../../../src/components/AttendanceCalendarCard';
 import AttendanceStatGrid from '../../../src/components/attendance/AttendanceStatGrid';
 import MonthFilter from '../../../src/components/attendance/MonthFilter';
@@ -55,19 +56,16 @@ export default function Attendance() {
 
   return (
     <SafeAreaView edges={['top', 'left', 'right']} className="flex-1 bg-canvas">
-      <ScrollView
+      <AppScrollView
         className="flex-1"
         contentContainerClassName="gap-5 px-4"
         contentContainerStyle={{ paddingTop: 8, paddingBottom: insets.bottom + 112 }}
-        showsVerticalScrollIndicator={false}
       >
         {/* Header row: back + title on the left, month filter on the right */}
         <View className="-mx-4 min-h-[58px] flex-row items-center justify-between pr-4">
           <View className="flex-1">
             <BackButton
               title="Attendance"
-              subtitle="Track your daily attendance and work hours."
-              subtitleNumberOfLines={2}
             />
           </View>
           <View className="justify-center">
@@ -89,7 +87,7 @@ export default function Attendance() {
           hideLeaveLegend
           onMonthStatuses={setDayStatuses}
         />
-      </ScrollView>
+      </AppScrollView>
     </SafeAreaView>
   );
 }

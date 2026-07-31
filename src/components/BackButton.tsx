@@ -82,15 +82,13 @@ export default function BackButton({
         <ChevronLeft size={22} color="#14323F" />
       </Pressable>
       {title ? (
-        <View className="flex-1">
-          <Text className="text-[18px] font-bold leading-6 text-ink" numberOfLines={1}>
+        <View className="h-10 flex-1 justify-center">
+          <Text
+            className="text-left text-[18px] font-bold leading-6 text-ink"
+            numberOfLines={1}
+          >
             {title}
           </Text>
-          {subtitle ? (
-            <Text className="text-xs leading-4 text-slate-400" numberOfLines={subtitleNumberOfLines}>
-              {subtitle}
-            </Text>
-          ) : null}
         </View>
       ) : null}
     </View>

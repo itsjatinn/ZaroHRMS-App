@@ -17,6 +17,7 @@ import {
 } from '../../src/api/leave';
 import { useHolidayCalendar } from '../../src/api/holidays';
 import { useAuth } from '../../src/auth/AuthContext';
+import AppScrollView from '../../src/components/AppScrollView';
 import LeaveForm from '../../src/components/leave/LeaveForm';
 import {
   LEAVE_TYPES,
@@ -377,13 +378,11 @@ export default function LeaveApplicationScreen() {
   return (
     <SafeAreaView edges={['top', 'left', 'right']} className="flex-1 bg-canvas">
       <BackButton title="Apply Leave" />
-      <ScrollView
+      <AppScrollView
         ref={scrollRef}
         className="flex-1"
         contentContainerClassName="p-4 gap-4"
         contentContainerStyle={{ paddingBottom: keyboardHeight + 40 }}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
       >
         {/* 1) Balance tiles — horizontal scroll */}
         <ScrollView
@@ -413,7 +412,7 @@ export default function LeaveApplicationScreen() {
         {/* 2) The form. The post-apply balance lives on the selected tile
             above, so there is no separate summary card to place. */}
         <View>{leaveDetailsForm}</View>
-      </ScrollView>
+      </AppScrollView>
 
       <RequestSuccessModal
         visible={success !== null}
