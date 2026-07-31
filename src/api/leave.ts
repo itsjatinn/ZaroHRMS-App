@@ -425,12 +425,21 @@ export function useMyRequests(enabled = true) {
   });
 }
 
-/** Withdraw / cancel one of the employee's own requests. */
+/**
+ * Withdraw / cancel one of the employee's own requests.
+ *
+ * POST :id/cancel is the employee's own action (requests.controller.ts
+ * `cancelRequest` → `cancelMine`). The similarly named PATCH
+ * :id/cancellation is the manager's DECISION on such a request and takes
+ * `{ approve, comment }` — calling it as the employee fails, and its absent
+ * `approve` field would read as a rejection. approvals.ts uses that one,
+ * correctly.
+ */
 export function useCancelMyRequest() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (input: { id: string; reason: string }) =>
-      api.patch(`/requests/${input.id}/cancellation`, {
+      api.post(`/requests/${input.id}/cancel`, {
         reason: input.reason,
       }),
     onSuccess: () => {
