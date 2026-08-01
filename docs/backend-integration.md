@@ -42,6 +42,22 @@ Server state goes through TanStack Query (`src/api/queryClient.ts`, provider in
 | --- | --- |
 | Sign in | `POST /api/auth/login`, `POST /api/auth/logout`, `POST /api/auth/refresh` |
 | Holidays | `GET /api/requests/calendar?year=`, `GET /api/requests/optional-holidays/context`, `POST /api/requests/optional-holidays/claim`, `POST /api/requests/optional-holidays/:claimId/cancel` |
+| Quick actions (policy portal, LMS) | `GET /api/services/available`, `GET /api/services/:key/launch` |
+
+## Satellite launches (policy portal, LMS)
+
+The app never holds a satellite's launch secret. `src/api/services.ts` asks the
+backend for a signed URL per tap and hands it to an in-app browser
+(`QuickActionsCard.tsx`), so the secret stays server-side and the same flow
+serves web and app.
+
+**The app needs no URL registered on the satellite.** When you enable HRMS
+launch on the policy portal you must fill an "Allowed iframe origin" field —
+put the **web panel's** origin there. That value only widens the
+`frame-ancestors` CSP header for iframe embeds; `GET /api/hrms/launch` never
+reads it, so a launch from the app succeeds no matter what it holds. The LMS
+has no origin field at all. See
+`Zaro-HRMS/docs/satellite-services-integration.md` for the full rationale.
 
 MFA-protected accounts and accounts flagged `passwordResetRequired` are turned
 away with a message — neither flow exists in the app yet, both are completed on
