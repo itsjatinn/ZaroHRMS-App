@@ -45,11 +45,18 @@ export default function Attendance() {
   // claims) and hands the result up, so the summary counts exactly the days
   // the grid draws instead of a second, divergent source.
   const [dayStatuses, setDayStatuses] = useState<Record<number, string>>({});
+  const [calendarLoading, setCalendarLoading] = useState(false);
 
   const data = useMemo(
-    () =>
-      isBackendSession ? fromDayStatuses(dayStatuses) : getMonthData(year, month),
-    [isBackendSession, dayStatuses, year, month],
+    () => {
+      if (isBackendSession && calendarLoading) {
+        return { present: 0, absent: 0, late: 0, leave: 0, working: 0 };
+      }
+      return isBackendSession
+        ? fromDayStatuses(dayStatuses)
+        : getMonthData(year, month);
+    },
+    [isBackendSession, calendarLoading, dayStatuses, year, month],
   );
   const stats = toStats(data);
   const percent = toPercent(data);
@@ -78,7 +85,11 @@ export default function Attendance() {
         </View>
 
         {/* Summary: 2×2 grid with a center % ring */}
-        <AttendanceStatGrid stats={stats} percent={percent} />
+        <AttendanceStatGrid
+          stats={stats}
+          percent={percent}
+          loading={isBackendSession && calendarLoading}
+        />
 
         {/* Monthly attendance calendar */}
         <AttendanceCalendarCard
@@ -86,6 +97,7 @@ export default function Attendance() {
           month={month}
           hideLeaveLegend
           onMonthStatuses={setDayStatuses}
+          onMonthLoadingChange={setCalendarLoading}
         />
       </AppScrollView>
     </SafeAreaView>

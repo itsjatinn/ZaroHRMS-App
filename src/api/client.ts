@@ -1,6 +1,5 @@
-import * as SecureStore from 'expo-secure-store';
-
 import { API_URL } from './config';
+import { getItem, removeItem, setItem } from '../auth/secureStorage';
 
 // Single HTTP entry point for the app: attaches the bearer token, parses Nest's
 // error envelope, and silently refreshes an expired access token once before
@@ -43,9 +42,9 @@ export function getAccessToken() {
 /** Reads the persisted token into memory. Call once on app start. */
 export async function restoreAccessToken() {
   try {
-    accessToken = await SecureStore.getItemAsync(ACCESS_TOKEN_KEY);
+    accessToken = await getItem(ACCESS_TOKEN_KEY);
   } catch {
-    // Keychain unavailable (e.g. web) — stay signed out.
+    // Storage unavailable — keep the in-memory client unauthenticated.
     accessToken = null;
   }
   return accessToken;
@@ -54,8 +53,8 @@ export async function restoreAccessToken() {
 export async function setAccessToken(token: string | null) {
   accessToken = token;
   try {
-    if (token) await SecureStore.setItemAsync(ACCESS_TOKEN_KEY, token);
-    else await SecureStore.deleteItemAsync(ACCESS_TOKEN_KEY);
+    if (token) await setItem(ACCESS_TOKEN_KEY, token);
+    else await removeItem(ACCESS_TOKEN_KEY);
   } catch {
     // Ignore persistence failures; the in-memory token still works.
   }

@@ -1,7 +1,7 @@
 import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 
 import {
   useAttendanceCalendar,
@@ -174,6 +174,8 @@ type AttendanceCalendarCardProps = {
   variant?: 'card' | 'plain';
   /** Reports the month's day statuses so a parent can summarise them. */
   onMonthStatuses?: (statuses: Record<number, string>) => void;
+  /** Reports whether this month is still resolving its first live payload. */
+  onMonthLoadingChange?: (loading: boolean) => void;
   /** When provided, the calendar is controlled by the parent (arrows hidden). */
   year?: number;
   month?: number; // 0-11
@@ -217,6 +219,7 @@ export default function AttendanceCalendarCard({
   month,
   hideLeaveLegend = false,
   onMonthStatuses,
+  onMonthLoadingChange,
 }: AttendanceCalendarCardProps) {
   const router = useRouter();
   const { isBackendSession } = useAuth();
@@ -296,6 +299,24 @@ export default function AttendanceCalendarCard({
   const optionalAutoApprove = isBackendSession
     ? Boolean(optionalClaimsQuery.data?.autoApprove)
     : false;
+  const gateLoading = isBackendSession && gate.modules == null;
+  const attendanceLoading =
+    isBackendSession &&
+    gate.attendanceOn &&
+    monthQuery.data == null &&
+    (monthQuery.isLoading || monthQuery.isFetching);
+  const holidaysLoading =
+    isBackendSession &&
+    (gate.attendanceOn || gate.leaveOn) &&
+    holidaysQuery.data == null &&
+    (holidaysQuery.isLoading || holidaysQuery.isFetching);
+  const optionalClaimsLoading =
+    isBackendSession &&
+    (gate.attendanceOn || gate.leaveOn) &&
+    optionalClaimsQuery.data == null &&
+    (optionalClaimsQuery.isLoading || optionalClaimsQuery.isFetching);
+  const monthLoading =
+    gateLoading || attendanceLoading || holidaysLoading || optionalClaimsLoading;
 
   const dayStatuses = useMemo(() => {
     const map: Record<number, Status> = {};
@@ -370,7 +391,11 @@ export default function AttendanceCalendarCard({
     onMonthStatuses?.(dayStatuses);
     // statusesKey (not the object) so a fresh object with equal content is a
     // no-op rather than an infinite update loop.
-  }, [statusesKey]);
+  }, [onMonthStatuses, statusesKey, dayStatuses]);
+
+  useEffect(() => {
+    onMonthLoadingChange?.(monthLoading);
+  }, [onMonthLoadingChange, monthLoading]);
 
   // Legend groups follow the licensed modules, like the web: a disabled
   // module's keys would advertise states that can never appear on the grid.
@@ -645,6 +670,20 @@ export default function AttendanceCalendarCard({
                 <Text className="text-xs font-bold text-white">Apply leave</Text>
               </Pressable>
             ) : null}
+          </View>
+        ) : null}
+
+        {monthLoading ? (
+          <View
+            pointerEvents="none"
+            className="absolute inset-0 items-center justify-center rounded-2xl bg-white/75"
+          >
+            <View className="flex-row items-center gap-2 rounded-full bg-white px-3 py-2">
+              <ActivityIndicator size="small" color={NAVY} />
+              <Text className="text-xs font-semibold text-slate-500">
+                Loading attendance
+              </Text>
+            </View>
           </View>
         ) : null}
       </View>

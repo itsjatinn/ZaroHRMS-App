@@ -1,5 +1,5 @@
 import type { LucideIcon } from 'lucide-react-native';
-import { Text, View } from 'react-native';
+import { ActivityIndicator, Text, View } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
 
 import { cardShadow } from '../shadow';
@@ -15,6 +15,7 @@ export type GridStat = {
 type Props = {
   stats: [GridStat, GridStat, GridStat, GridStat]; // TL, TR, BL, BR
   percent: number;
+  loading?: boolean;
 };
 
 const INK = '#14323F'; // primary card color
@@ -40,10 +41,12 @@ function Cell({
   stat,
   iconPos,
   align,
+  loading,
 }: {
   stat: GridStat;
   iconPos: IconPos;
   align: 'left' | 'right';
+  loading?: boolean;
 }) {
   const Icon = stat.icon;
   const right = align === 'right';
@@ -60,7 +63,7 @@ function Cell({
         {stat.label}
       </Text>
       <Text className={`mt-1 text-3xl font-bold text-white ${right ? 'text-right' : ''}`}>
-        {stat.value}
+        {loading ? '--' : stat.value}
       </Text>
 
       {/* Icon badge in its assigned corner — one consistent neutral tint */}
@@ -80,21 +83,21 @@ function Cell({
 // 2×2 stat grid. A single canvas-colored circle overlaid at the center "bites"
 // all four inner corners at once, so they curve inward around a hole that holds
 // the attendance % ring.
-export default function AttendanceStatGrid({ stats, percent }: Props) {
+export default function AttendanceStatGrid({ stats, percent, loading = false }: Props) {
   const [tl, tr, bl, br] = stats;
-  const arc = (percent / 100) * RC;
+  const arc = loading ? 0 : (percent / 100) * RC;
 
   return (
     <View className="relative">
       {/* Cards */}
       <View style={{ gap: GAP }}>
         <View className="flex-row" style={{ gap: GAP }}>
-          <Cell stat={tl} iconPos="tr" align="left" />
-          <Cell stat={tr} iconPos="tl" align="right" />
+          <Cell stat={tl} iconPos="tr" align="left" loading={loading} />
+          <Cell stat={tr} iconPos="tl" align="right" loading={loading} />
         </View>
         <View className="flex-row" style={{ gap: GAP }}>
-          <Cell stat={bl} iconPos="br" align="left" />
-          <Cell stat={br} iconPos="bl" align="right" />
+          <Cell stat={bl} iconPos="br" align="left" loading={loading} />
+          <Cell stat={br} iconPos="bl" align="right" loading={loading} />
         </View>
       </View>
 
@@ -128,10 +131,16 @@ export default function AttendanceStatGrid({ stats, percent }: Props) {
               transform={`rotate(-90 ${RING / 2} ${RING / 2})`}
             />
           </Svg>
-          <Text className="text-[22px] font-bold text-ink">{percent}%</Text>
-          <Text className="text-[8px] font-semibold uppercase tracking-wide text-slate-400">
-            Present
-          </Text>
+          {loading ? (
+            <ActivityIndicator size="small" color={INK} />
+          ) : (
+            <>
+              <Text className="text-[22px] font-bold text-ink">{percent}%</Text>
+              <Text className="text-[8px] font-semibold uppercase tracking-wide text-slate-400">
+                Present
+              </Text>
+            </>
+          )}
         </View>
       </View>
     </View>
