@@ -39,7 +39,8 @@ export default function Header() {
   const unreadCount = useUnreadCount();
   // The signed-in employee's real name; the demo profile only as a fallback.
   const { user } = useAuth();
-  const firstName = (user?.name ?? currentUser.name).trim().split(/\s+/)[0];
+  const fullName = (user?.name ?? currentUser.name).trim();
+  const firstName = fullName.split(/\s+/)[0] || 'there';
 
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -83,7 +84,7 @@ export default function Header() {
   }));
 
   return (
-    <View className="relative h-12 flex-row items-center">
+    <View className="relative min-h-12 flex-row items-center">
       {/* Menu — fixed on the left. Usable even mid-search: dismisses the
           search bar so the drawer doesn't open over a focused keyboard. */}
       <Pressable
@@ -108,9 +109,9 @@ export default function Header() {
           top. h-full is required: the row's items-center would otherwise
           shrink this to the greeting's text height, squashing the absolutely
           positioned search bar with it. */}
-      <View className="h-full min-w-0 flex-1 justify-center">
+      <View className="min-h-12 min-w-0 flex-1 justify-center py-1">
         <Animated.View style={greetingStyle} pointerEvents={searchOpen ? 'none' : 'auto'}>
-          <Text numberOfLines={1} className="text-xl font-bold text-ink">
+          <Text className="text-xl font-bold leading-6 text-ink">
             {getGreeting()}, {firstName}
           </Text>
         </Animated.View>

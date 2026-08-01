@@ -10,6 +10,8 @@ type BalanceTileProps = {
   label: string;
   value: number;
   accent: string; // dot color for this leave type
+  /** Stronger treatment for informational balances such as Loss of Pay. */
+  highlighted?: boolean;
   /** Marks the tile whose leave type is currently chosen. */
   selected?: boolean;
   /**
@@ -37,6 +39,7 @@ export default function BalanceTile({
   label,
   value,
   accent,
+  highlighted = false,
   selected = false,
   remainingAfter = null,
   onPress,
@@ -72,13 +75,18 @@ export default function BalanceTile({
   // between the tile and the dropdown below is visible at a glance.
   const surface = selected
     ? { width: TILE_WIDTH, borderColor: accent, borderWidth: 1.5 }
-    : { width: TILE_WIDTH };
+    : highlighted
+      ? { width: TILE_WIDTH, borderColor: accent, borderWidth: 1.5 }
+      : { width: TILE_WIDTH };
+  const className = highlighted
+    ? 'rounded-2xl border bg-[#F8FAFB] p-4'
+    : 'rounded-2xl border border-slate-100 bg-white p-4';
 
   if (!onPress) {
     return (
       <View
         style={[cardShadow, surface]}
-        className="rounded-2xl border border-slate-100 bg-white p-4"
+        className={className}
       >
         {body}
       </View>
@@ -92,7 +100,7 @@ export default function BalanceTile({
       accessibilityLabel={`${label}, ${value} days left`}
       accessibilityState={{ selected }}
       style={[cardShadow, surface]}
-      className="rounded-2xl border border-slate-100 bg-white p-4 active:scale-[0.98]"
+      className={`${className} active:scale-[0.98]`}
     >
       {body}
     </Pressable>

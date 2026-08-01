@@ -109,22 +109,31 @@ export default function AllRequestsScreen() {
     );
   };
 
+  const requestsForYear = useMemo(
+    () =>
+      requests.filter((request) => {
+        const requestYear = request.month.match(/\b(\d{4})\b/)?.[1];
+        return requestYear === year;
+      }),
+    [requests, year],
+  );
+
   const counts = useMemo(
     () => ({
-      All: requests.length,
-      Pending: requests.filter((r) => r.status === 'Pending').length,
-      Approved: requests.filter((r) => r.status === 'Approved').length,
-      Rejected: requests.filter((r) => r.status === 'Rejected').length,
+      All: requestsForYear.length,
+      Pending: requestsForYear.filter((r) => r.status === 'Pending').length,
+      Approved: requestsForYear.filter((r) => r.status === 'Approved').length,
+      Rejected: requestsForYear.filter((r) => r.status === 'Rejected').length,
     }),
-    [requests],
+    [requestsForYear],
   );
 
   const visible = useMemo(
     () =>
       filter === 'All'
-        ? requests
-        : requests.filter((r) => r.status === filter),
-    [filter, requests],
+        ? requestsForYear
+        : requestsForYear.filter((r) => r.status === filter),
+    [filter, requestsForYear],
   );
 
   // Consecutive requests sharing a month collapse under one section header
@@ -168,6 +177,7 @@ export default function AllRequestsScreen() {
           placeholder="2026"
           options={YEARS}
           onSelect={setYear}
+          overlay
         />
       </View>
 
@@ -179,10 +189,6 @@ export default function AllRequestsScreen() {
         <SummaryChip value={counts.Rejected} label="Rejected" />
       </View>
 
-      <View className="mt-4 flex-row justify-end px-4">
-        <FilterIconButton onPress={() => setFilterOpen(true)} />
-      </View>
-
       <AppScrollView
         className="flex-1"
         contentContainerClassName="px-4 pb-32 pt-4"
@@ -192,9 +198,14 @@ export default function AllRequestsScreen() {
         ) : grouped.length > 0 ? (
           grouped.map((section, i) => (
             <View key={`${section.month}-${i}`} className={i === 0 ? '' : 'mt-5'}>
-              <Text className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-                {section.month}
-              </Text>
+              <View className="mb-3 min-h-10 flex-row items-center justify-between">
+                <Text className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                  {section.month}
+                </Text>
+                {i === 0 ? (
+                  <FilterIconButton onPress={() => setFilterOpen(true)} />
+                ) : null}
+              </View>
               <View className="gap-4">
                 {section.items.map((r) => (
                   <RequestCard
@@ -228,7 +239,7 @@ export default function AllRequestsScreen() {
               No {filter.toLowerCase()} requests
             </Text>
             <Text className="px-10 text-center text-sm text-slate-400">
-              You have no {filter.toLowerCase()} leave requests right now.
+              You have no {filter.toLowerCase()} leave requests in {year}.
             </Text>
           </View>
         )}

@@ -1,5 +1,5 @@
 import { useRouter } from 'expo-router';
-import { Bell, ChevronLeft } from 'lucide-react-native';
+import { ChevronLeft } from 'lucide-react-native';
 import { useMemo, useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -21,7 +21,6 @@ import CancelLeaveDialog from '../../../src/components/leave/CancelLeaveDialog';
 import RequestCard from '../../../src/components/leave/RequestCard';
 import type { Request } from '../../../src/components/leave/requestsData';
 import { REQUESTS, toRequest } from '../../../src/components/leave/requestsData';
-import { useUnreadCount } from '../../../src/components/notifications/notificationsStore';
 import { cardShadow } from '../../../src/components/shadow';
 
 // ---- Static demo data ----
@@ -44,6 +43,42 @@ const TILE_ACCENTS = [
   '#B96A00',
 ];
 
+type BalanceView = {
+  label: string;
+  value: number;
+  accent: string;
+  highlighted?: boolean;
+  orderKind?: 'regular' | 'comp-off' | 'loss-of-pay';
+};
+
+function normalizedLeaveName(value: string) {
+  return value.toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+function isCompOffLabel(value: string) {
+  const normalized = normalizedLeaveName(value);
+  return normalized === 'compoff' || normalized === 'compensatoryoff';
+}
+
+function isLossOfPayLabel(value: string) {
+  const normalized = normalizedLeaveName(value);
+  return normalized === 'lop' || normalized === 'lossofpay';
+}
+
+function orderBalanceTiles(tiles: BalanceView[]) {
+  const regular: BalanceView[] = [];
+  const compOff: BalanceView[] = [];
+  const lossOfPay: BalanceView[] = [];
+
+  for (const tile of tiles) {
+    if (tile.orderKind === 'loss-of-pay') lossOfPay.push(tile);
+    else if (tile.orderKind === 'comp-off') compOff.push(tile);
+    else regular.push(tile);
+  }
+
+  return [...regular, ...compOff, ...lossOfPay];
+}
+
 const FILTERS = [
   'All',
   'Pending',
@@ -57,7 +92,6 @@ type Filter = (typeof FILTERS)[number];
 
 export default function LeaveOverviewScreen() {
   const router = useRouter();
-  const unreadCount = useUnreadCount();
   const { isBackendSession } = useAuth();
   const [filter, setFilter] = useState<Filter>('All');
   const [filterOpen, setFilterOpen] = useState(false);
@@ -70,14 +104,31 @@ export default function LeaveOverviewScreen() {
   const requestsQuery = useMyRequests(isBackendSession);
 
   const balances = useMemo(
-    () =>
-      isBackendSession
-        ? applicable.types.map((type, index) => ({
-            label: type.short,
-            value: type.remaining,
-            accent: TILE_ACCENTS[index % TILE_ACCENTS.length],
-          }))
-        : BALANCES,
+    () => {
+      const tiles = isBackendSession
+        ? applicable.types.map<BalanceView>((type, index) => {
+            const identity = `${type.key} ${type.label} ${type.short}`;
+            const isLossOfPay = isLossOfPayLabel(identity);
+            const isCompOff = isCompOffLabel(identity);
+            return {
+              label: type.short,
+              value: type.remaining,
+              accent: isLossOfPay
+                ? '#475467'
+                : isCompOff
+                  ? '#0F9488'
+                  : TILE_ACCENTS[index % TILE_ACCENTS.length],
+              highlighted: isLossOfPay,
+              orderKind: isLossOfPay
+                ? 'loss-of-pay'
+                : isCompOff
+                  ? 'comp-off'
+                  : 'regular',
+            };
+          })
+        : BALANCES;
+      return orderBalanceTiles(tiles);
+    },
     [isBackendSession, applicable.types],
   );
 
@@ -125,8 +176,7 @@ export default function LeaveOverviewScreen() {
         className="flex-1"
         contentContainerClassName="pb-32"
       >
-        {/* Header — mirrors the shared BackButton styling, with a trailing
-            notification bell unique to the overview. */}
+        {/* Header — mirrors the shared BackButton styling. */}
         <View className="flex-row items-center gap-3 px-4 pb-1 pt-2">
           <Pressable
             onPress={goBack}
@@ -143,16 +193,7 @@ export default function LeaveOverviewScreen() {
               My Leave
             </Text>
           </View>
-          <Pressable
-            onPress={() => router.push('/notifications')}
-            hitSlop={8}
-            className="h-11 w-11 items-center justify-center active:scale-95"
-          >
-            <Bell size={22} color="#14323F" />
-            {unreadCount > 0 ? (
-              <View className="absolute right-2.5 top-2.5 h-2.5 w-2.5 rounded-full border-2 border-canvas bg-gold" />
-            ) : null}
-          </Pressable>
+          <View className="h-11 w-11" />
         </View>
 
         {/* Horizontally-scrolling balance tiles */}
@@ -169,6 +210,7 @@ export default function LeaveOverviewScreen() {
               label={b.label}
               value={b.value}
               accent={b.accent}
+              highlighted={b.highlighted}
             />
           ))}
         </ScrollView>

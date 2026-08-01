@@ -34,7 +34,15 @@
       "name": "ZaroHR",
       "shortName": "ZaroHR",
       "themeColor": "#14323F",
-      "backgroundColor": "#14323F"
+      "backgroundColor": "#14323F",
+      "display": "standalone",
+      "startUrl": "/",
+      "scope": "/",
+      "splash": {
+        "image": "./assets/splash-icon.png",
+        "resizeMode": "contain",
+        "backgroundColor": "#14323F"
+      }
     },
     "plugins": [
       "expo-secure-store",

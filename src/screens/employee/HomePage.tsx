@@ -4,6 +4,7 @@ import {
   Dimensions,
   Easing,
   Image,
+  Platform,
   Pressable,
   StatusBar,
   Text,
@@ -89,7 +90,7 @@ export default function HomePage() {
       toValue: 1,
       duration: DURATION,
       easing: Easing.bezier(0.33, 1, 0.68, 1),
-      useNativeDriver: true,
+      useNativeDriver: Platform.OS !== 'web',
     }).start();
   }, [progress]);
 
@@ -98,7 +99,7 @@ export default function HomePage() {
       toValue: 0,
       duration: DURATION,
       easing: Easing.bezier(0.33, 1, 0.68, 1),
-      useNativeDriver: true,
+      useNativeDriver: Platform.OS !== 'web',
     }).start(() => {
       setSidebarVisible(false);
     });

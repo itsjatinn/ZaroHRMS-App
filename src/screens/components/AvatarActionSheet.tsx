@@ -5,6 +5,7 @@ import {
   Easing,
   Linking,
   Modal,
+  Platform,
   Pressable,
   Text,
   View,
@@ -63,7 +64,7 @@ export default function AvatarActionSheet({
       toValue: visible ? 1 : 0,
       duration: visible ? 340 : 220,
       easing: Easing.bezier(0.22, 1, 0.36, 1),
-      useNativeDriver: true,
+      useNativeDriver: Platform.OS !== 'web',
     }).start(({ finished }) => {
       if (finished && !visible) setRendered(false);
     });

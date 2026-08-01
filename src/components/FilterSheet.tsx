@@ -71,7 +71,7 @@ export default function FilterSheet<T extends string>({
     Animated.timing(slide, {
       toValue: visible ? 1 : 0,
       duration: 240,
-      useNativeDriver: true,
+      useNativeDriver: Platform.OS !== 'web',
     }).start();
   }, [slide, visible]);
 

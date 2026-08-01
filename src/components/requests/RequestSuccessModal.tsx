@@ -4,6 +4,7 @@ import {
   Animated,
   Easing,
   Modal,
+  Platform,
   Pressable,
   Text,
   useWindowDimensions,
@@ -56,7 +57,7 @@ export default function RequestSuccessModal({
       toValue: 1,
       duration: 320,
       easing: Easing.out(Easing.back(2)),
-      useNativeDriver: true,
+      useNativeDriver: Platform.OS !== 'web',
     }).start();
   }, [visible, pop]);
 
