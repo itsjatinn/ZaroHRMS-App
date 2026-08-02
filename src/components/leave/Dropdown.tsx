@@ -5,6 +5,7 @@ import {
   Easing,
   Modal,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -24,6 +25,9 @@ type DropdownProps = {
 
 const OPTION_HEIGHT = 44;
 const MENU_PADDING = 12;
+const MAX_MENU_HEIGHT = 276;
+const VIEWPORT_GUTTER = 12;
+const MENU_GAP = 8;
 
 // Menus float over white cards, so they need a real shadow (stronger than
 // cardShadow) to separate from the surface beneath.
@@ -44,7 +48,7 @@ export default function Dropdown({
   onSelect,
   error = false,
   className = '',
-  overlay = false,
+  overlay = true,
 }: DropdownProps) {
   const [open, setOpen] = useState(false);
   const [anchor, setAnchor] = useState<{
@@ -55,8 +59,12 @@ export default function Dropdown({
   } | null>(null);
   const slideProgress = useRef(new Animated.Value(0)).current;
   const triggerRef = useRef<View>(null);
-  const { width: windowWidth } = useWindowDimensions();
-  const menuHeight = options.length * OPTION_HEIGHT + MENU_PADDING;
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+  const menuHeight = Math.min(
+    options.length * OPTION_HEIGHT + MENU_PADDING,
+    MAX_MENU_HEIGHT,
+    Math.max(OPTION_HEIGHT + MENU_PADDING, windowHeight - VIEWPORT_GUTTER * 2),
+  );
 
   useEffect(() => {
     if (!open) return;
@@ -120,38 +128,61 @@ export default function Dropdown({
   };
 
   const renderOptions = () => (
-    <Animated.View style={menuContentStyle} className="p-1.5">
-      {options.map((option) => {
-        const selected = option === value;
-        return (
-          <Pressable
-            key={option}
-            onPress={() => {
-              onSelect(option);
-              closeMenu();
-            }}
-            style={{ height: OPTION_HEIGHT }}
-            className={`flex-row items-center justify-between rounded-xl px-3.5 ${
-              selected ? 'bg-slate-100' : 'active:bg-slate-50'
-            }`}
-          >
-            <Text
-              className={`text-sm ${
-                selected ? 'font-bold text-ink' : 'text-ink'
+    <Animated.View style={[menuContentStyle, { flex: 1 }]}>
+      <ScrollView
+        nestedScrollEnabled
+        showsVerticalScrollIndicator={options.length * OPTION_HEIGHT > menuHeight}
+        contentContainerStyle={{ padding: MENU_PADDING / 2 }}
+      >
+        {options.map((option) => {
+          const selected = option === value;
+          return (
+            <Pressable
+              key={option}
+              onPress={() => {
+                onSelect(option);
+                closeMenu();
+              }}
+              style={{ height: OPTION_HEIGHT }}
+              className={`flex-row items-center justify-between rounded-xl px-3.5 ${
+                selected ? 'bg-slate-100' : 'active:bg-slate-50'
               }`}
             >
-              {option}
-            </Text>
-            {selected && <Check size={16} color="#14323F" strokeWidth={2.5} />}
-          </Pressable>
-        );
-      })}
+              <Text
+                className={`text-sm ${
+                  selected ? 'font-bold text-ink' : 'text-ink'
+                }`}
+              >
+                {option}
+              </Text>
+              {selected && <Check size={16} color="#14323F" strokeWidth={2.5} />}
+            </Pressable>
+          );
+        })}
+      </ScrollView>
     </Animated.View>
   );
 
   const overlayLeft = anchor
-    ? Math.min(Math.max(anchor.x, 12), windowWidth - anchor.width - 12)
-    : 12;
+    ? Math.min(
+        Math.max(anchor.x, VIEWPORT_GUTTER),
+        windowWidth - anchor.width - VIEWPORT_GUTTER,
+      )
+    : VIEWPORT_GUTTER;
+  const spaceBelow = anchor
+    ? windowHeight - (anchor.y + anchor.height) - VIEWPORT_GUTTER
+    : 0;
+  const openAbove = Boolean(
+    anchor && spaceBelow < menuHeight + MENU_GAP && anchor.y > spaceBelow,
+  );
+  const overlayTop = anchor
+    ? openAbove
+      ? Math.max(VIEWPORT_GUTTER, anchor.y - menuHeight - MENU_GAP)
+      : Math.min(
+          anchor.y + anchor.height + MENU_GAP,
+          windowHeight - menuHeight - VIEWPORT_GUTTER,
+        )
+    : VIEWPORT_GUTTER;
 
   return (
     <View
@@ -190,7 +221,7 @@ export default function Dropdown({
                 {
                   position: 'absolute',
                   left: overlayLeft,
-                  top: anchor.y + anchor.height + 8,
+                  top: overlayTop,
                   width: anchor.width,
                   height: menuHeight,
                   overflow: 'hidden',

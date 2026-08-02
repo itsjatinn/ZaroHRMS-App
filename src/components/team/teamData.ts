@@ -2,7 +2,12 @@
 // Everything is pinned to July 2026 so the mock month lines up with the
 // designs (1 Jul 2026 is a Wednesday).
 
-export type TeamStatus = 'Present' | 'WFH/WO' | 'On leave' | 'Absent';
+export type TeamStatus =
+  | 'Present'
+  | 'Half day'
+  | 'WFH/WO'
+  | 'On leave'
+  | 'Absent';
 
 export type TeamMember = {
   initials: string;
@@ -27,6 +32,9 @@ export const TEAM: TeamMember[] = [
 
 export const STATUS_STYLE: Record<TeamStatus, { bg: string; text: string; dot: string }> = {
   Present: { bg: '#E8F5EF', text: '#2F7D5B', dot: '#50A47D' },
+  // The pink the attendance calendars already use for half days, so a
+  // half day reads the same wherever a manager meets it.
+  'Half day': { bg: '#FCE7F3', text: '#9D174D', dot: '#EC4899' },
   'WFH/WO': { bg: '#EEEDFC', text: '#6258B2', dot: '#8177D2' },
   'On leave': { bg: '#FFF4D9', text: '#9B6A12', dot: '#D29A2E' },
   Absent: { bg: '#FDEBEC', text: '#B74853', dot: '#DF6470' },

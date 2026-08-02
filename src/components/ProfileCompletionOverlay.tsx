@@ -11,11 +11,14 @@ import Animated, {
 
 import { cardShadow } from './shadow';
 import { EXIT_DURATION, EXIT_EASING } from './morphTiming';
-import { ProfileCompletionBody } from './ProfileCompletionCard';
+import {
+  ProfileCompletionBody,
+  type ProfileCompletionProps,
+} from './ProfileCompletionCard';
 
 const { height: SCREEN_H } = Dimensions.get('window');
 
-type Props = {
+type Props = ProfileCompletionProps & {
   /** Called once the fly-to-top exit finishes so the parent can unmount us. */
   onClose: () => void;
   /** Called the moment the dismiss begins, so the home card can start landing. */
@@ -28,7 +31,12 @@ type Props = {
  * screen (where the real card lives on the home page) while the backdrop fades,
  * so it reads as the card settling into place.
  */
-export default function ProfileCompletionOverlay({ onClose, onDismissStart }: Props) {
+export default function ProfileCompletionOverlay({
+  percent,
+  missing,
+  onClose,
+  onDismissStart,
+}: Props) {
   // 0 = hidden/entering start, 1 = fully shown, then driven back toward exit.
   const enter = useSharedValue(0);
   // Exit driver: 0 = in place, 1 = flown to top + gone.
@@ -91,7 +99,7 @@ export default function ProfileCompletionOverlay({ onClose, onDismissStart }: Pr
             <Feather name="x" size={18} color="#5B7B82" />
           </Pressable>
 
-          <ProfileCompletionBody />
+          <ProfileCompletionBody percent={percent} missing={missing} />
         </Animated.View>
       </View>
     </View>

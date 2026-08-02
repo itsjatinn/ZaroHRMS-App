@@ -119,6 +119,34 @@ export function fetchMe() {
   }>('/auth/me');
 }
 
+/**
+ * Starts the "I forgot my password" flow. Always resolves when the server is
+ * reachable — the backend answers identically whether or not the address
+ * exists, so the app must not report "no such account" either. It also
+ * throttles to one email per address per 15 minutes and still answers
+ * success, so a second tap inside that window sends nothing.
+ */
+export function requestPasswordReset(email: string) {
+  return api.post<{ success: boolean }>(
+    '/auth/forgot-password',
+    { email: email.trim().toLowerCase() },
+    { anonymous: true },
+  );
+}
+
+/**
+ * Consumes a token from the reset email and sets a new password. The token is
+ * the credential, so no session is needed; it is single-use and expires an
+ * hour after the email was sent.
+ */
+export function resetPassword(input: { token: string; newPassword: string }) {
+  return api.post<{ success: boolean }>(
+    '/auth/reset-password',
+    { token: input.token.trim(), newPassword: input.newPassword },
+    { anonymous: true },
+  );
+}
+
 /** Best-effort server-side sign-out — clears the refresh token/cookie. */
 export function logout() {
   // `noAuthRetry`: an expired token here needs no refresh — we are throwing the

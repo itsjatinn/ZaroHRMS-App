@@ -3,14 +3,8 @@ import { useRouter } from 'expo-router';
 import { Pressable, Text, View } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
 
+import type { ProfileCompletionItem } from '../api/profile';
 import { cardShadow } from './shadow';
-
-// Profile-completion progress. Swap DONE_STEPS for real data when wired up.
-export const TOTAL_STEPS = 5;
-export const DONE_STEPS = 1;
-export const PERCENT = Math.round((DONE_STEPS / TOTAL_STEPS) * 100);
-export const ITEMS_LEFT = TOTAL_STEPS - DONE_STEPS;
-export const PROFILE_INCOMPLETE = DONE_STEPS < TOTAL_STEPS;
 
 const PROGRESS = '#14323F'; // ink teal (brand primary)
 const TRACK = '#D2E0E1';
@@ -21,8 +15,8 @@ const STROKE = 7;
 const R = (SIZE - STROKE) / 2;
 const C = 2 * Math.PI * R;
 
-export function ProgressRing() {
-  const arc = (PERCENT / 100) * C;
+export function ProgressRing({ percent }: { percent: number }) {
+  const arc = (Math.max(0, Math.min(100, percent)) / 100) * C;
 
   return (
     <View style={{ width: SIZE, height: SIZE }} className="items-center justify-center">
@@ -47,28 +41,44 @@ export function ProgressRing() {
           transform={`rotate(-90 ${SIZE / 2} ${SIZE / 2})`}
         />
       </Svg>
-      <Text className="text-lg font-bold text-ink">{PERCENT}%</Text>
+      <Text className="text-lg font-bold text-ink">{percent}%</Text>
     </View>
   );
 }
 
+export type ProfileCompletionProps = {
+  percent: number;
+  /** Sections still to fill, in the order the backend returned them. */
+  missing: ProfileCompletionItem[];
+};
+
 /**
  * The body of the profile-completion card: ring + heading + CTA. Shared by the
  * home-screen card and the first-load popup so they look identical.
+ *
+ * Naming the sections that are actually missing (rather than a generic "finish
+ * setting up") is what makes the card actionable — the employee can see
+ * whether they are one bank account away from done or have not started.
  */
-export function ProfileCompletionBody() {
+export function ProfileCompletionBody({ percent, missing }: ProfileCompletionProps) {
   const router = useRouter();
+  const left = missing.length;
 
   return (
     <View className="flex-row items-center">
-      <ProgressRing />
+      <ProgressRing percent={percent} />
 
       <View className="ml-4 flex-1">
         <Text className="text-[17px] font-bold text-ink">
           Complete your profile
         </Text>
         <Text className="mt-1 text-[13px] leading-5 text-[#5B7B82]">
-          Finish setting up to help your team reach you.
+          {left === 0
+            ? 'Finish setting up to help your team reach you.'
+            : `${left} item${left === 1 ? '' : 's'} left · ${missing
+                .slice(0, 2)
+                .map((m) => m.label)
+                .join(', ')}${left > 2 ? '…' : ''}`}
         </Text>
 
         <Pressable
@@ -83,7 +93,11 @@ export function ProfileCompletionBody() {
   );
 }
 
-export default function ProfileCompletionCard({ onClose }: { onClose?: () => void }) {
+export default function ProfileCompletionCard({
+  percent,
+  missing,
+  onClose,
+}: ProfileCompletionProps & { onClose?: () => void }) {
   return (
     <View
       style={cardShadow}
@@ -100,7 +114,7 @@ export default function ProfileCompletionCard({ onClose }: { onClose?: () => voi
           <Feather name="x" size={15} color="#5B7B82" />
         </Pressable>
       ) : null}
-      <ProfileCompletionBody />
+      <ProfileCompletionBody percent={percent} missing={missing} />
     </View>
   );
 }

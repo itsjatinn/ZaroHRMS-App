@@ -34,7 +34,11 @@ function toTeamStatus(row: TeamMemberRow): TeamStatus {
   }
   if (status === 'LEAVE' || status === 'HOLIDAY') return 'On leave';
   if (status === 'ABSENT') return 'Absent';
-  // PRESENT and HALF_DAY both mean "working today" for the roster pill.
+  // Half day is its own pill, not a flavour of Present. The backend already
+  // resolves it from worked hours against the shift's half/full-day
+  // thresholds at punch-out; folding it into Present here told a manager
+  // someone worked a full day when the server had decided otherwise.
+  if (status === 'HALF_DAY') return 'Half day';
   return 'Present';
 }
 

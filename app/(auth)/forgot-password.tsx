@@ -2,6 +2,8 @@ import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 
+import { requestPasswordReset } from '../../src/api/auth';
+import { NetworkError } from '../../src/api/client';
 import AuthButton from '../../src/components/auth/AuthButton';
 import AuthField from '../../src/components/auth/AuthField';
 import AuthShell from '../../src/components/auth/AuthShell';
@@ -13,6 +15,7 @@ export default function ForgotPasswordScreen() {
   const [email, setEmail] = useState('');
   const [error, setError] = useState<string>();
   const [loading, setLoading] = useState(false);
+  const [sent, setSent] = useState(false);
 
   const handleSendLink = async () => {
     if (!email.trim()) {
@@ -24,11 +27,26 @@ export default function ForgotPasswordScreen() {
       return;
     }
 
-    // TODO: call the reset-link API. For now continue to the reset screen so
-    // the flow is viewable end to end.
     setLoading(true);
+    setError(undefined);
     try {
-      router.push('/reset-password');
+      await requestPasswordReset(email);
+      // The response is deliberately identical whether or not the address is
+      // registered, so this screen cannot say "we sent it" — only that we
+      // would have. Saying more would turn the screen into an oracle for
+      // which emails hold an account.
+      setSent(true);
+    } catch (err) {
+      // A failed send is worth surfacing: the backend deliberately throws
+      // rather than returning success when the mail relay is down, because
+      // the old behaviour left people waiting for an email that never came.
+      setError(
+        err instanceof NetworkError
+          ? 'Cannot reach the server. Check your connection and try again.'
+          : err instanceof Error && err.message
+            ? err.message
+            : 'Could not send the reset link. Please try again in a moment.',
+      );
     } finally {
       setLoading(false);
     }
@@ -41,10 +59,26 @@ export default function ForgotPasswordScreen() {
 
   return (
     <AuthShell
-      title="Forgot password"
-      subtitle="Enter your email and we'll send you a link to reset it."
+      title={sent ? 'Check your email' : 'Forgot password'}
+      subtitle={
+        sent
+          ? `If an account exists for ${email.trim()}, a reset link is on its way. The link opens in your browser and expires in 1 hour.`
+          : "Enter your email and we'll send you a link to reset it."
+      }
       visualSource={require('../../assets/forgot_pass.png')}
     >
+      {sent ? (
+        <View className="gap-4">
+          <Text
+            className="text-center text-sm text-slate-500"
+            style={{ fontFamily: font.regular }}
+          >
+            Nothing arrived? Check your spam folder. You can request another
+            link in 15 minutes.
+          </Text>
+          <AuthButton label="Back to sign in" onPress={backToSignIn} />
+        </View>
+      ) : (
       <View className="gap-4">
         <AuthField
           label="Email"
@@ -79,6 +113,7 @@ export default function ForgotPasswordScreen() {
           </Text>
         </Pressable>
       </View>
+      )}
     </AuthShell>
   );
 }

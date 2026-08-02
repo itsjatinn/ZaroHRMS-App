@@ -2,6 +2,7 @@ import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
+import Svg, { Circle } from 'react-native-svg';
 
 import {
   useAttendanceCalendar,
@@ -14,6 +15,54 @@ import { useAuth } from '../auth/AuthContext';
 import { cardShadow } from './shadow';
 
 const NAVY = '#14323F';
+
+/**
+ * Dashed ring, drawn as an SVG stroke.
+ *
+ * React Native silently ignores `borderStyle: 'dashed'` once a view has a
+ * border radius — it renders solid on device, even though react-native-web
+ * honours it. Every "pending / applied" cue here is a dashed ring whose whole
+ * job is to distinguish it from the solid-ringed "approved" state, so on a
+ * phone those pairs were indistinguishable. Stroking a real circle is the only
+ * way to get a dash that survives on both platforms.
+ *
+ * The dash pattern is derived from the circumference rather than hard-coded so
+ * the ring closes evenly instead of leaving a ragged gap where the stroke
+ * wraps, at both the 10px legend dot and the 36px day cell.
+ */
+function DashedRing({
+  size,
+  color,
+  width = 1.5,
+}: {
+  size: number;
+  color: string;
+  width?: number;
+}) {
+  const radius = (size - width) / 2;
+  const circumference = 2 * Math.PI * radius;
+  // ~5px per dash+gap pair, then snapped to a whole number of pairs.
+  const pairs = Math.max(4, Math.round(circumference / 5));
+  const dash = circumference / (pairs * 2);
+  return (
+    <Svg
+      width={size}
+      height={size}
+      style={{ position: 'absolute', top: 0, left: 0 }}
+      pointerEvents="none"
+    >
+      <Circle
+        cx={size / 2}
+        cy={size / 2}
+        r={radius}
+        stroke={color}
+        strokeWidth={width}
+        strokeDasharray={`${dash} ${dash}`}
+        fill="none"
+      />
+    </Svg>
+  );
+}
 const WEEKDAYS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 
 type Status =
@@ -30,6 +79,8 @@ type Status =
   | 'lop'
   | 'optional-claimed'
   | 'optional-pending'
+  | 'regularization-applied'
+  | 'regularization-approved'
   | 'today';
 
 /**
@@ -85,15 +136,42 @@ const STATUS_STYLE: Record<
     border: '#1D4ED8',
     dashed: true,
   },
-  compoff: { bg: 'rgba(13, 148, 136, 0.2)', text: '#0F766E' },
+  compoff: {
+    bg: 'rgba(13, 148, 136, 0.2)',
+    text: '#0F766E',
+    // Solid ring, as on web: the 20%-opacity teal fill alone is faint enough
+    // to read as an unmarked day.
+    border: '#0F766E',
+  },
   lop: { bg: 'rgba(71, 84, 103, 0.26)', text: '#475467' },
+  /**
+   * Attendance regularization. Violet is the last hue with real separation
+   * left here — every other family is spoken for — so the ring carries the
+   * meaning as well as the colour: dashed while the request is pending, solid
+   * once it has been approved and the day's times were corrected. That mirrors
+   * how WFH/OD and optional holidays already distinguish applied from granted.
+   */
+  'regularization-applied': {
+    bg: 'rgba(147, 51, 234, 0.16)',
+    text: '#6B21A8',
+    border: '#9333EA',
+    dashed: true,
+  },
+  'regularization-approved': {
+    bg: 'rgba(147, 51, 234, 0.28)',
+    text: '#6B21A8',
+    border: '#9333EA',
+  },
   // Optional-holiday claims have no web equivalent yet; they reuse the holiday
   // hue (a claimed day is a day off) with the pending one dashed.
-  'optional-claimed': { bg: 'rgba(224, 120, 86, 0.32)', text: '#B04A2A', border: '#E07856' },
+  // Ring is the deeper #C0552F, not the fill colour: against the same orange
+  // fill an #E07856 ring is invisible, which is what made a claimed day
+  // indistinguishable from an ordinary holiday. Matches the web cell.
+  'optional-claimed': { bg: 'rgba(224, 120, 86, 0.32)', text: '#B04A2A', border: '#C0552F' },
   'optional-pending': {
     bg: 'rgba(212, 162, 74, 0.22)',
     text: '#A37526',
-    border: '#D4A24A',
+    border: 'rgba(212, 162, 74, 0.8)',
     dashed: true,
   },
   today: { bg: '#14323F', text: '#FFFFFF' },
@@ -130,44 +208,76 @@ type LegendItem = {
 
 // The web widget's legend groups, colour for colour. Attendance statuses and
 // leave statuses are separate groups because each is licensed separately.
+// No "In progress" key: an open punch now only ever shows on the current day
+// (the nightly sweep resolves older ones to Absent), so the dashed pill is
+// always the day the employee is looking at and needs no legend entry.
 const ATTENDANCE_LEGEND: LegendItem[] = [
   { label: 'Present', color: '#5E9B7B' },
-  { label: 'In progress', color: '#94A3B8', dashed: true },
   { label: 'Absent', color: '#DC2626' },
   {
     label: 'Half Day',
     color: 'transparent',
     halfFill: ['#EC4899', 'rgba(236, 72, 153, 0.28)'],
   },
+  // After the three core outcomes: regularization modifies a day rather than
+  // being an outcome of its own. Order matches the web widget key for key.
+  {
+    label: 'Regularization applied',
+    color: 'rgba(147, 51, 234, 0.16)',
+    border: '#9333EA',
+    dashed: true,
+  },
+  { label: 'Regularization approved', color: '#9333EA' },
 ];
 
 const HOLIDAY_LEGEND: LegendItem = {
   label: 'Holiday',
   color: '#E07856',
+  // Faint ring, as on the web dot — it is what separates Holiday from the
+  // solid-ringed "Optional holiday claimed" sitting right beside it.
+  border: 'rgba(224, 120, 86, 0.4)',
 };
 
 const LEAVE_LEGEND: LegendItem[] = [
   { label: 'Leave applied', color: '#7C7BD8' },
   { label: 'Leave approved', color: '#D4A24A' },
-  { label: 'WFH / OD applied', color: '#0EA5E9' },
-  { label: 'WFH / OD approved', color: '#1D4ED8' },
-  { label: 'Comp Off', color: '#0F9488' },
+  // "On Duty", not "OD": the web spells it out, and the abbreviation is not
+  // self-evident to an employee reading the key for the first time.
+  // The applied dot is the translucent fill + ring the cell uses, so the
+  // legend teaches the actual treatment rather than a solid swatch that
+  // appears nowhere on the grid.
+  {
+    label: 'WFH / On Duty applied',
+    color: 'rgba(14, 165, 233, 0.28)',
+    border: 'rgba(14, 165, 233, 0.75)',
+  },
+  // Dashed ring mirrors the cell (STATUS_STYLE.wfh), same as the web dot.
+  {
+    label: 'WFH / On Duty approved',
+    color: '#1D4ED8',
+    border: 'rgba(29, 78, 216, 0.5)',
+    dashed: true,
+  },
+  { label: 'Comp Off', color: '#0F9488', border: 'rgba(13, 148, 136, 0.35)' },
   { label: 'Loss of Pay', color: '#475467' },
 ];
 
 // Optional-holiday claims are their own record (not leave rows), so they are
 // their own legend group — shown whenever either module is on, like Holiday.
+// The dot mirrors the cell (the holiday hue with a solid ring), not a brown of
+// its own — it previously showed a colour that appeared nowhere on the grid.
 const OPTIONAL_CLAIMED_LEGEND: LegendItem = {
   label: 'Optional holiday claimed',
-  color: '#8B5E34',
+  color: '#E07856',
+  border: '#C0552F',
 };
 // Only meaningful when HR requires approval — with auto-approve on, a claim is
 // approved the moment it is made, so a pending day can never appear.
 const OPTIONAL_PENDING_LEGEND: LegendItem = {
   label: 'Optional holiday pending',
-  color: '#C89B6A',
+  color: '#D4A24A',
   dashed: true,
-  border: '#8B5E34',
+  border: 'rgba(212, 162, 74, 0.7)',
 };
 
 type AttendanceCalendarCardProps = {
@@ -208,6 +318,10 @@ function toDayStatus(kind: CalendarDayKind | undefined): Status | undefined {
       return 'compoff';
     case 'lop':
       return 'lop';
+    case 'regularization-applied':
+      return 'regularization-applied';
+    case 'regularization-approved':
+      return 'regularization-approved';
     default:
       return undefined;
   }
@@ -579,20 +693,28 @@ export default function AttendanceCalendarCard({
                         // Absent days are actionable; the selected one gets an
                         // ink ring while its popover is showing. Otherwise the
                         // status's own outline cue (holiday, WFH/OD) applies.
+                        // A dashed ring is drawn by DashedRing below, because a
+                        // dashed border renders solid once the view is round.
+                        // The selected ring is always solid and wins outright.
                         borderWidth: selected
                           ? 2
-                          : STATUS_STYLE[status].border
+                          : STATUS_STYLE[status].border &&
+                              !STATUS_STYLE[status].dashed
                             ? 1.5
                             : 0,
                         borderColor: selected
                           ? NAVY
                           : STATUS_STYLE[status].border,
-                        borderStyle:
-                          !selected && STATUS_STYLE[status].dashed
-                            ? 'dashed'
-                            : 'solid',
                       }}
                     >
+                      {!selected &&
+                      STATUS_STYLE[status].dashed &&
+                      STATUS_STYLE[status].border ? (
+                        <DashedRing
+                          size={36}
+                          color={STATUS_STYLE[status].border!}
+                        />
+                      ) : null}
                       {STATUS_STYLE[status].halfFill ? (
                         <View className="absolute inset-0 flex-row overflow-hidden rounded-full">
                           <View
@@ -735,11 +857,16 @@ export default function AttendanceCalendarCard({
                       className="h-2.5 w-2.5 rounded-full"
                       style={{
                         backgroundColor: item.color,
-                        borderWidth: item.border ? 1.5 : 0,
+                        // A dashed ring is drawn by DashedRing instead: a
+                        // dashed *border* renders solid on device.
+                        borderWidth: item.border && !item.dashed ? 1.5 : 0,
                         borderColor: item.border,
-                        borderStyle: item.dashed ? 'dashed' : 'solid',
                       }}
-                    />
+                    >
+                      {item.dashed && item.border ? (
+                        <DashedRing size={10} color={item.border} />
+                      ) : null}
+                    </View>
                   )}
                   <Text className="text-xs text-slate-500">{item.label}</Text>
                 </View>

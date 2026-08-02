@@ -76,7 +76,11 @@ export function useSubmitRequest() {
       queryClient.invalidateQueries({ queryKey: leaveKeys.summary() });
       queryClient.invalidateQueries({ queryKey: ['leave', 'mine'] });
       queryClient.invalidateQueries({ queryKey: ['attendance'] });
-      queryClient.invalidateQueries({ queryKey: ['workRequests'] });
+      // 'work-requests' (hyphenated) is the real key prefix — see
+      // src/api/workRequests.ts. The old camelCase key matched nothing, so
+      // the WFH/OD remaining-allowance tiles kept serving their cached count
+      // after a submit, and the client-side cap pre-check ran against it.
+      queryClient.invalidateQueries({ queryKey: ['work-requests'] });
     },
   });
 }

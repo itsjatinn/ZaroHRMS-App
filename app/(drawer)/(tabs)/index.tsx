@@ -15,11 +15,12 @@ import AppScrollView from '../../../src/components/AppScrollView';
 import PulseCard from '../../../src/components/PulseCard';
 import PulseCelebrationOverlay from '../../../src/components/pulse/PulseCelebrationOverlay';
 import ProfileCompletionCard, {
-  PROFILE_INCOMPLETE,
+  type ProfileCompletionProps,
 } from '../../../src/components/ProfileCompletionCard';
 import ProfileCompletionOverlay from '../../../src/components/ProfileCompletionOverlay';
 import { EXIT_DURATION, EXIT_EASING, LAND_RISE } from '../../../src/components/morphTiming';
 import { useModuleGate } from '../../../src/api/modules';
+import { useProfileCompletion } from '../../../src/api/profile';
 import { useAuth } from '../../../src/auth/AuthContext';
 import ClockInCard from '../../../src/components/ClockInCard';
 import LeaveBalanceCard from '../../../src/components/LeaveBalanceCard';
@@ -40,21 +41,35 @@ function ProfileCardSlot({
   hidden,
   animateIn,
   onClose,
+  percent,
+  missing,
 }: {
   hidden: boolean;
   animateIn: boolean;
   onClose: () => void;
-}) {
+} & ProfileCompletionProps) {
   // Not mounted at all while hidden → no reserved space, no gap.
   if (hidden) return null;
-  return <LandingCard animateIn={animateIn} onClose={onClose} />;
+  return (
+    <LandingCard
+      animateIn={animateIn}
+      onClose={onClose}
+      percent={percent}
+      missing={missing}
+    />
+  );
 }
 
 // Rises into place on mount when arriving from the popup, using the SAME timing
 // as the overlay's fly-up so the two motions stay synced and read as one card
 // moving to the top. Without the popup it shows settled immediately. On close it
 // smoothly fades + collapses before the parent unmounts it.
-function LandingCard({ animateIn, onClose }: { animateIn: boolean; onClose: () => void }) {
+function LandingCard({
+  animateIn,
+  onClose,
+  percent,
+  missing,
+}: { animateIn: boolean; onClose: () => void } & ProfileCompletionProps) {
   const landed = useSharedValue(animateIn ? 0 : 1);
   const exit = useSharedValue(0); // 0 = present, 1 = closed away
 
@@ -92,7 +107,7 @@ function LandingCard({ animateIn, onClose }: { animateIn: boolean; onClose: () =
 
   return (
     <Animated.View style={style} className="overflow-hidden">
-      <ProfileCompletionCard onClose={close} />
+      <ProfileCompletionCard percent={percent} missing={missing} onClose={close} />
     </Animated.View>
   );
 }
@@ -106,13 +121,25 @@ export default function Index() {
   const { isBackendSession } = useAuth();
   const gate = useModuleGate(isBackendSession);
 
-  const [showPopup, setShowPopup] = useState(() => {
-    if (PROFILE_INCOMPLETE && !popupShownThisLaunch) {
+  // Live checklist from the backend. Gated on a real session: the demo
+  // session carries no bearer token, and an unrecoverable 401 signs the user
+  // out — the same reason QuickActionsCard gates its own calls.
+  const completionQuery = useProfileCompletion(isBackendSession);
+  const completion = completionQuery.data;
+  const missing = completion?.items.filter((i) => !i.done) ?? [];
+  // Only once the server has answered. Rendering on a pending query would
+  // flash the card at 0% for every employee, including finished ones.
+  const profileIncomplete = Boolean(completion) && !completion!.complete;
+
+  const [showPopup, setShowPopup] = useState(false);
+  // The popup decision has to wait for the query, so it cannot be a useState
+  // initialiser. Still fires at most once per launch.
+  useEffect(() => {
+    if (profileIncomplete && !popupShownThisLaunch) {
       popupShownThisLaunch = true;
-      return true;
+      setShowPopup(true);
     }
-    return false;
-  });
+  }, [profileIncomplete]);
   // Flips true the moment dismiss starts, so the home card lands while the
   // overlay card is still flying up. `showPopup` stays true until the overlay
   // fully exits and unmounts.
@@ -135,11 +162,13 @@ export default function Index() {
         >
           <Header />
           <PulseCard />
-          {!cardDismissed ? (
+          {profileIncomplete && !cardDismissed ? (
             <ProfileCardSlot
               hidden={showPopup && !dismissing}
               animateIn={dismissing}
               onClose={() => setCardDismissed(true)}
+              percent={completion?.percent ?? 0}
+              missing={missing}
             />
           ) : null}
           {gate.attendanceOn ? <ClockInCard /> : null}
@@ -159,8 +188,10 @@ export default function Index() {
           being clipped to the scroll bounds. */}
       <PulseCelebrationOverlay />
 
-      {showPopup ? (
+      {showPopup && profileIncomplete ? (
         <ProfileCompletionOverlay
+          percent={completion?.percent ?? 0}
+          missing={missing}
           onDismissStart={() => setDismissing(true)}
           onClose={() => setShowPopup(false)}
         />

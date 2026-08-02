@@ -195,6 +195,10 @@ export type CalendarDayKind =
   | 'approved'
   | 'compoff'
   | 'lop'
+  /** Regularization request raised for the day, not yet decided. */
+  | 'regularization-applied'
+  /** An approved regularization corrected this day's times. */
+  | 'regularization-approved'
   | (string & {});
 
 export type MonthCalendar = {
@@ -271,11 +275,27 @@ export function usePunch() {
     }) =>
       api.post<AttendanceDay>('/attendance/punch', {
         action: input.action,
+        // Declares which capture channel this is, because the server defaults
+        // an absent source to WEB: it then enforced the tenant's *web* punch
+        // toggle against mobile punches (an enabled button the server would
+        // refuse when webPunch was off) and stamped every mobile punch as
+        // AttendanceMethod.WEB in reports.
+        source: 'MOBILE',
         ...(input.latitude !== undefined && input.longitude !== undefined
           ? { latitude: input.latitude, longitude: input.longitude }
           : {}),
       }),
-    onSuccess: () => {
+    onSuccess: (day) => {
+      // The punch response IS the resulting business day, so write it straight
+      // into the cache: the card flips to its new state on the same tick
+      // instead of waiting for /attendance/me to come back. Against a remote
+      // database that refetch is what made a punch feel slow even though the
+      // punch itself had already committed.
+      if (day) queryClient.setQueryData(attendanceKeys.today(), day);
+      // Still refresh in the background — /attendance/me carries the wider
+      // view (shift context, overnight resolution) and the month/summary
+      // feeds need to catch up — but nothing here is awaited, so none of it
+      // delays the button.
       queryClient.invalidateQueries({ queryKey: attendanceKeys.today() });
       queryClient.invalidateQueries({ queryKey: ['attendance', 'month'] });
       queryClient.invalidateQueries({ queryKey: ['attendance', 'summary'] });

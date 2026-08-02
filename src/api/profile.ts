@@ -390,7 +390,41 @@ function fromResponse(raw: ProfileResponse | null): MyProfile {
 
 export const profileKeys = {
   me: () => ['profile', 'me'] as const,
+  completion: () => ['profile', 'completion'] as const,
 };
+
+/** One self-service section the employee can still fill in. */
+export type ProfileCompletionItem = {
+  id: 'contact' | 'demographics' | 'address' | 'bank' | 'emergency' | 'documents';
+  label: string;
+  detail: string;
+  done: boolean;
+};
+
+export type ProfileCompletion = {
+  percent: number;
+  complete: boolean;
+  doneCount: number;
+  totalCount: number;
+  items: ProfileCompletionItem[];
+};
+
+/**
+ * Which profile sections are still empty. Computed by the backend so this
+ * card and the web's agree — both used to decide for themselves, and this
+ * one was hardcoded to a placeholder 20%.
+ */
+export function useProfileCompletion(enabled = true) {
+  return useQuery({
+    queryKey: profileKeys.completion(),
+    queryFn: ({ signal }) =>
+      api.get<ProfileCompletion>('/employees/me/profile-completion', {
+        signal,
+      }),
+    staleTime: 60_000,
+    enabled,
+  });
+}
 
 export function useMyProfile(enabled = true) {
   return useQuery({
@@ -414,6 +448,10 @@ function useSliceMutation<TBody>(request: (body: TBody) => Promise<unknown>) {
     mutationFn: request,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: profileKeys.me() });
+      // Filling a section can complete the checklist, which is what makes the
+      // completion card disappear — without this it would linger until the
+      // next cold start.
+      queryClient.invalidateQueries({ queryKey: profileKeys.completion() });
     },
   });
 }
