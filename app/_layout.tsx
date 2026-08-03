@@ -11,15 +11,19 @@ import {
 } from '@expo-google-fonts/plus-jakarta-sans';
 import { SplashScreen, Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect } from 'react';
-import { Platform, Text, TextInput } from 'react-native';
+import { useCallback, useEffect, useState } from 'react';
+import { Platform, Text, TextInput, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { enableFreeze } from 'react-native-screens';
 
-import { QueryClientProvider } from '@tanstack/react-query';
+import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client';
 
-import { queryClient } from '../src/api/queryClient';
+import {
+  QUERY_CACHE_MAX_AGE,
+  queryClient,
+  queryPersister,
+} from '../src/api/queryClient';
 import { AuthProvider, useAuth } from '../src/auth/AuthContext';
 import { splashExiting } from '../src/components/auth/authTiming';
 import { lockViewportToDesignWidth } from '../src/web/viewport';
@@ -106,36 +110,45 @@ textInputDefaults.defaultProps = {
 // in/out automatically swaps between the auth flow and the app.
 function RootNavigator({ fontsReady }: { fontsReady: boolean }) {
   const { isAuthenticated, isLoading } = useAuth();
+  const [firstFrameDone, setFirstFrameDone] = useState(false);
 
   // `appReady` flips once fonts + session are restored. Until then the
   // platform splash covers everything; once ready we hide it and let the app
   // render directly, avoiding a second React splash screen.
   const appReady = fontsReady && !isLoading;
 
+  // The splash only leaves once React has actually painted a frame
+  // (`onLayout` below) AND the session is settled — hiding on `appReady`
+  // alone uncovered the window a beat before the first screen committed,
+  // which showed as a bare background flash between splash and home.
   useEffect(() => {
-    if (!appReady) return;
+    if (!appReady || !firstFrameDone) return;
     void SplashScreen.hideAsync();
     // Auth CardEntrance used to listen to the custom splash overlay. With the
     // built-in splash as the only startup screen, this edge starts that same
     // entrance when the platform splash leaves.
     splashExiting.value = 1;
-  }, [appReady]);
+  }, [appReady, firstFrameDone]);
+
+  const handleFirstLayout = useCallback(() => setFirstFrameDone(true), []);
 
   return (
-    <Stack
-      screenOptions={{
-        headerShown: false,
-        animation: 'fade',
-        animationDuration: 250,
-      }}
-    >
-      <Stack.Protected guard={isAuthenticated}>
-        <Stack.Screen name="(drawer)" />
-      </Stack.Protected>
-      <Stack.Protected guard={!isAuthenticated}>
-        <Stack.Screen name="(auth)" />
-      </Stack.Protected>
-    </Stack>
+    <View style={{ flex: 1 }} onLayout={handleFirstLayout}>
+      <Stack
+        screenOptions={{
+          headerShown: false,
+          animation: 'fade',
+          animationDuration: 250,
+        }}
+      >
+        <Stack.Protected guard={isAuthenticated}>
+          <Stack.Screen name="(drawer)" />
+        </Stack.Protected>
+        <Stack.Protected guard={!isAuthenticated}>
+          <Stack.Screen name="(auth)" />
+        </Stack.Protected>
+      </Stack>
+    </View>
   );
 }
 
@@ -165,12 +178,21 @@ export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1, overflow: 'hidden' }}>
       <SafeAreaProvider>
-        <QueryClientProvider client={queryClient}>
+        <PersistQueryClientProvider
+          client={queryClient}
+          persistOptions={{
+            persister: queryPersister,
+            maxAge: QUERY_CACHE_MAX_AGE,
+            // Bump to discard everyone's persisted snapshots after a breaking
+            // change to a cached payload's shape.
+            buster: 'v1',
+          }}
+        >
           <AuthProvider>
             <RootNavigator fontsReady={fontsReady} />
             <StatusBar style="dark" />
           </AuthProvider>
-        </QueryClientProvider>
+        </PersistQueryClientProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

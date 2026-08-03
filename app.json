@@ -8,11 +8,6 @@
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
-    "splash": {
-      "image": "./assets/splash-icon.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#14323F"
-    },
     "ios": {
       "bundleIdentifier": "com.zarohr.app",
       "supportsTablet": true
@@ -45,6 +40,19 @@
       }
     },
     "plugins": [
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 200,
+          "resizeMode": "contain",
+          "backgroundColor": "#14323F",
+          "dark": {
+            "image": "./assets/splash-icon.png",
+            "backgroundColor": "#14323F"
+          }
+        }
+      ],
       "expo-secure-store",
       [
         "expo-image-picker",

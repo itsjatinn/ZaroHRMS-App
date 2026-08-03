@@ -16,7 +16,7 @@ import {
   setAccessToken,
   setUnauthorizedHandler,
 } from '../api/client';
-import { queryClient } from '../api/queryClient';
+import { queryClient, queryPersister } from '../api/queryClient';
 import type { UserRole } from './demoCredentials';
 
 // Keys under which auth state is persisted in the device keychain. The access
@@ -176,6 +176,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Ignore; clear in-memory session regardless.
     }
     queryClient.clear();
+    // The disk snapshot too — otherwise the next account to sign in on this
+    // device briefly hydrates the previous user's cached data.
+    void queryPersister.removeClient();
     setSession(null);
     setUserRole('employee');
     setProfile(EMPTY_PROFILE);
