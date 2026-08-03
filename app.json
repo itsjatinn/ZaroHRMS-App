@@ -2,7 +2,7 @@
   "expo": {
     "name": "ZaroHR",
     "slug": "zarohr",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "scheme": "zarohrm",
     "orientation": "portrait",
     "icon": "./assets/icon.png",

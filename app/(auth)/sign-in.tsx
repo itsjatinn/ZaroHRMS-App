@@ -1,3 +1,4 @@
+import Constants from 'expo-constants';
 import { Link, useLocalSearchParams } from 'expo-router';
 import { Check, Eye, EyeOff } from 'lucide-react-native';
 import { useRef, useState } from 'react';
@@ -448,6 +449,14 @@ export default function SignInScreen() {
               }
             />
           </View>
+        </StaggerItem>
+
+        {/* Build identity — which binary is actually installed. Settles any
+            "is this the new build?" question without a computer. */}
+        <StaggerItem>
+          <Text className="mt-4 text-center text-[11px] text-slate-400">
+            v{Constants.expoConfig?.version ?? '—'}
+          </Text>
         </StaggerItem>
         </AuthForm>
       </View>
