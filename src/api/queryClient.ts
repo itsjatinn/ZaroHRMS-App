@@ -1,4 +1,5 @@
-import { QueryClient } from '@tanstack/react-query';
+import { QueryClient, focusManager } from '@tanstack/react-query';
+import { AppState, Platform } from 'react-native';
 
 import { ApiError } from './client';
 
@@ -13,8 +14,20 @@ export const queryClient = new QueryClient({
         return failureCount < 2;
       },
       staleTime: 60_000,
-      refetchOnWindowFocus: false,
+      // Combined with the AppState wiring below, returning to the app
+      // refetches whatever stale queries are on screen — data written while
+      // the phone was in a pocket shows up without a manual pull-to-refresh.
+      refetchOnWindowFocus: true,
     },
     mutations: { retry: false },
   },
 });
+
+// TanStack only knows about browser focus events. On native, teach it that
+// "app returned to the foreground" is the focus signal. (On web the built-in
+// visibilitychange handling already covers this.)
+if (Platform.OS !== 'web') {
+  AppState.addEventListener('change', (status) => {
+    focusManager.setFocused(status === 'active');
+  });
+}

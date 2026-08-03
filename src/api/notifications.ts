@@ -55,8 +55,25 @@ export function useNotificationFeed(filter: 'all' | 'unread', enabled = true) {
   });
 }
 
-/** Zone-aware badge count, kept separate so the bell can poll it cheaply. */
+/**
+ * Last unread count each poll saw, module-level so several mounted bells
+ * share one baseline and don't invalidate more than once per change.
+ */
+let lastSeenUnreadCount: number | null = null;
+
+/**
+ * Zone-aware badge count, kept separate so the bell can poll it cheaply.
+ *
+ * The poll doubles as the app's change feed: every server-side event that
+ * matters to this user (a decision on their request, a report's new request
+ * for a manager, a published payslip, …) also writes a notification, so a
+ * RISING unread count means the database changed underneath the cache.
+ * When that happens every cached server query is invalidated — screens that
+ * are open refetch in the background right away, everything else refetches
+ * on its next mount — so the app catches up without a manual refresh.
+ */
 export function useUnreadNotificationCount(enabled = true) {
+  const queryClient = useQueryClient();
   return useQuery({
     queryKey: notificationKeys.unread(),
     queryFn: async ({ signal }) => {
@@ -64,7 +81,22 @@ export function useUnreadNotificationCount(enabled = true) {
         `/notifications/unread-count?zone=${ZONE}`,
         { signal },
       );
-      return result?.unreadCount ?? 0;
+      const count = result?.unreadCount ?? 0;
+      if (lastSeenUnreadCount !== null && count > lastSeenUnreadCount) {
+        // Everything except this very query (invalidating a query from
+        // inside its own fetch would refetch it in a loop). The feed lists
+        // under ['notifications', 'list', …] are included on purpose — a
+        // new row should appear on the notifications screen too.
+        void queryClient.invalidateQueries({
+          predicate: (query) =>
+            !(
+              query.queryKey[0] === 'notifications' &&
+              query.queryKey[1] === 'unread-count'
+            ),
+        });
+      }
+      lastSeenUnreadCount = count;
+      return count;
     },
     staleTime: 30_000,
     refetchInterval: 60_000,

@@ -138,6 +138,26 @@ export function evaluateRegularization(
     blockers.push('Fill all required fields to submit.');
   }
 
+  if (input.date) {
+    const day = new Date(
+      input.date.getFullYear(),
+      input.date.getMonth(),
+      input.date.getDate(),
+    );
+    const now = new Date(
+      input.today.getFullYear(),
+      input.today.getMonth(),
+      input.today.getDate(),
+    );
+    // Today's attendance is only final once the shift ends, so the latest
+    // regularizable day is yesterday.
+    if (day.getTime() >= now.getTime()) {
+      blockers.push(
+        'Only past days can be regularized — attendance is final once the shift ends.',
+      );
+    }
+  }
+
   if (!input.isAbsent) {
     blockers.push('Regularization can be applied only for absent days.');
   }

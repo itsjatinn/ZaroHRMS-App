@@ -557,6 +557,19 @@ export default function AttendanceCalendarCard({
   };
 
   /**
+   * Today's attendance is only provisional — the final status is written when
+   * the shift ends — so the current date can't be regularized, only past days.
+   */
+  const isTodayCell = (day: number) => {
+    const now = new Date();
+    return (
+      cursor.year === now.getFullYear() &&
+      cursor.month === now.getMonth() &&
+      day === now.getDate()
+    );
+  };
+
+  /**
    * An absent day is actionable when it isn't in the future — you can't
    * regularize or take leave for a day that hasn't happened — and at least one
    * resolution route is available. With neither, the menu would open empty, so
@@ -564,7 +577,7 @@ export default function AttendanceCalendarCard({
    */
   const isActionableAbsence = (day: number, status: Status | undefined) => {
     if (status !== 'absent') return false;
-    if (!canRegularize && !canApplyLeave) return false;
+    if ((!canRegularize || isTodayCell(day)) && !canApplyLeave) return false;
     const cellDate = new Date(cursor.year, cursor.month, day);
     const endOfToday = new Date();
     endOfToday.setHours(23, 59, 59, 999);
@@ -597,7 +610,9 @@ export default function AttendanceCalendarCard({
   // Popover geometry: anchored to the selected day's cell, clamped to the
   // grid, flipped above the day when it sits in the last row.
   const ROW_H = 48; // h-12 day rows
-  const actionCount = (canRegularize ? 1 : 0) + (canApplyLeave ? 1 : 0);
+  const showRegularize =
+    canRegularize && selectedAbsent != null && !isTodayCell(selectedAbsent);
+  const actionCount = (showRegularize ? 1 : 0) + (canApplyLeave ? 1 : 0);
   const PILL_W = actionCount > 1 ? 196 : 118;
   const PILL_H = 34;
   let pillStyle: { top: number; left: number } | null = null;
@@ -767,7 +782,7 @@ export default function AttendanceCalendarCard({
             }}
             className="flex-row overflow-hidden rounded-xl bg-ink"
           >
-            {canRegularize ? (
+            {showRegularize ? (
               <Pressable
                 onPress={() => openAbsenceAction('regularize')}
                 accessibilityRole="button"
@@ -778,7 +793,7 @@ export default function AttendanceCalendarCard({
               </Pressable>
             ) : null}
 
-            {canRegularize && canApplyLeave ? (
+            {showRegularize && canApplyLeave ? (
               <View className="my-2 w-px bg-white/25" />
             ) : null}
 

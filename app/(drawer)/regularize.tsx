@@ -116,10 +116,12 @@ function InfoBox({ label, value }: { label: string; value: string }) {
 function DateInput({
   value,
   error,
+  maximumDate,
   onChange,
 }: {
   value: Date | null;
   error: boolean;
+  maximumDate?: Date;
   onChange: (value: Date) => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -145,8 +147,9 @@ function DateInput({
       </Pressable>
       {open ? (
         <DateTimePicker
-          value={value ?? new Date()}
+          value={value ?? maximumDate ?? new Date()}
           mode="date"
+          maximumDate={maximumDate}
           onChange={handleChange}
         />
       ) : null}
@@ -247,6 +250,15 @@ export default function Regularize() {
 
   const [requestType, setRequestType] = useState<string | null>(null);
   const [date, setDate] = useState<Date | null>(null);
+
+  // Today's attendance is only final once the shift ends, so the date picker
+  // stops at yesterday.
+  const lastRegularizableDate = useMemo(() => {
+    const day = new Date();
+    day.setHours(0, 0, 0, 0);
+    day.setDate(day.getDate() - 1);
+    return day;
+  }, []);
 
   // Arriving from an absent day on the attendance calendar prefills the date
   // (?date=YYYY-MM-DD).
@@ -551,6 +563,9 @@ export default function Regularize() {
             <DateInput
               value={date}
               error={attempted && !date}
+              // Today's attendance is only final once the shift ends, so the
+              // latest regularizable day is yesterday.
+              maximumDate={lastRegularizableDate}
               onChange={setDate}
             />
           </View>
