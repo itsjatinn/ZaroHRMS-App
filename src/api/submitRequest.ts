@@ -37,8 +37,11 @@ export type SubmitRequestBody = {
   dayCount?: number;
   fromSession?: string;
   toSession?: string;
-  /** Required by the server before it will book over-balance days as LOP. */
-  acceptLop?: boolean;
+  // NOTE: no `acceptLop`. CreateRequestDto does not declare it and the
+  // validation pipe runs with forbidNonWhitelisted, so sending it failed the
+  // whole submit with "property acceptLop should not exist". The server owns
+  // the over-balance decision on its own — it allows up to the configured
+  // negative limit and otherwise answers "Insufficient leave balance".
   attachment?: StoredAttachment;
 };
 
@@ -47,14 +50,27 @@ export async function uploadRequestAttachment(file: {
   uri: string;
   name: string;
   mimeType?: string | null;
+  /**
+   * The browser File, which expo-document-picker / expo-image-picker set on
+   * web only ("for the parity with web File API"). Undefined on native.
+   */
+  file?: File | null;
 }): Promise<StoredAttachment> {
   const form = new FormData();
-  // React Native's FormData takes this {uri,name,type} shape for files.
-  form.append('file', {
-    uri: file.uri,
-    name: file.name,
-    type: file.mimeType || 'application/octet-stream',
-  } as unknown as Blob);
+  if (file.file) {
+    // Web: FormData only accepts a string or a real Blob/File. Appending the
+    // React Native shape below would stringify to "[object Object]", so the
+    // server received a plain text field and found no file at all — which is
+    // why attachments silently failed to upload in the browser.
+    form.append('file', file.file, file.name);
+  } else {
+    // React Native's FormData takes this {uri,name,type} shape for files.
+    form.append('file', {
+      uri: file.uri,
+      name: file.name,
+      type: file.mimeType || 'application/octet-stream',
+    } as unknown as Blob);
+  }
   return api.post<StoredAttachment>('/requests/attachments', form);
 }
 

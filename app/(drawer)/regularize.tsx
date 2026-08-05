@@ -1,6 +1,3 @@
-import DateTimePicker, {
-  type DateTimePickerEvent,
-} from '../../src/components/CrossDatePicker';
 import * as DocumentPicker from 'expo-document-picker';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { AlertCircle, CalendarDays, Clock3 } from 'lucide-react-native';
@@ -13,9 +10,15 @@ import {
   Text,
   TextInput,
   View,
-  findNodeHandle,
   useWindowDimensions,
 } from 'react-native';
+import CalendarDateSheet from '../../src/components/calendar/CalendarDateSheet';
+import {
+  dayMarkerKey,
+  REGULARIZE_DAY_MARKERS,
+  type DayMarkerKind,
+} from '../../src/components/calendar/dayMarkers';
+import { focusTargetHandle } from '../../src/components/nodeHandle';
 import { Alert } from '../../src/components/CrossAlert';
 import {
   SafeAreaView,
@@ -26,7 +29,9 @@ import {
   useAttendanceRules,
   useMyMonthDays,
 } from '../../src/api/attendance';
+import { useHolidayCalendar } from '../../src/api/holidays';
 import {
+  useLeavePolicySettings,
   useMyRegularizations,
   useRegularizationEnabled,
 } from '../../src/api/leave';
@@ -117,20 +122,24 @@ function DateInput({
   value,
   error,
   maximumDate,
+  markers,
+  weekOffWeekdays,
+  selectionGuard,
+  onVisibleMonthChange,
   onChange,
 }: {
   value: Date | null;
   error: boolean;
   maximumDate?: Date;
+  markers?: Map<string, DayMarkerKind>;
+  weekOffWeekdays?: number[];
+  selectionGuard?: React.ComponentProps<
+    typeof CalendarDateSheet
+  >['selectionGuard'];
+  onVisibleMonthChange?: (year: number, month: number) => void;
   onChange: (value: Date) => void;
 }) {
   const [open, setOpen] = useState(false);
-
-  const handleChange = (event: DateTimePickerEvent, date?: Date) => {
-    setOpen(false);
-    if (event.type === 'dismissed' || !date) return;
-    onChange(date);
-  };
 
   return (
     <>
@@ -145,14 +154,21 @@ function DateInput({
         </Text>
         <CalendarDays size={20} color="#64748B" />
       </Pressable>
-      {open ? (
-        <DateTimePicker
-          value={value ?? maximumDate ?? new Date()}
-          mode="date"
-          maximumDate={maximumDate}
-          onChange={handleChange}
-        />
-      ) : null}
+      {/* A regularization is always about a day that has already happened, so
+          the sheet greys out anything after `maximumDate`. */}
+      <CalendarDateSheet
+        visible={open}
+        title="Select date"
+        value={value}
+        maximumDate={maximumDate}
+        markers={markers}
+        weekOffWeekdays={weekOffWeekdays}
+        legend={REGULARIZE_DAY_MARKERS}
+        selectionGuard={selectionGuard}
+        onVisibleMonthChange={onVisibleMonthChange}
+        onSelect={onChange}
+        onClose={() => setOpen(false)}
+      />
     </>
   );
 }
@@ -280,6 +296,8 @@ export default function Regularize() {
     name: string;
     uri: string;
     mimeType?: string | null;
+    /** Set on web only; the upload needs the real File there. */
+    file?: File | null;
   } | null>(null);
   const [success, setSuccess] = useState<SuccessDetail[] | null>(null);
   // Covers the attachment upload as well as the POST.
@@ -334,6 +352,88 @@ export default function Regularize() {
       : String(selectedDay?.status ?? '').toUpperCase() === 'ABSENT'
     : true;
   const isLocked = isBackendSession ? selectedDay?.locked === true : false;
+
+  /**
+   * What the date sheet paints. Absences are the point of this screen — only
+   * an absent day can be regularized — so showing them on the picker saves
+   * choosing a day the form then rejects. Holidays and week-offs are there
+   * because they explain *why* a day is not absent.
+   */
+  const leaveSettings = useLeavePolicySettings(isBackendSession);
+  /**
+   * The month the picker is showing, which is not always the selected date's:
+   * the employee can page back before choosing. `monthDays` above stays keyed
+   * to the selection because it validates it; this second query follows the
+   * calendar, so paging never lands on a month with no absences marked.
+   * Same endpoint, cached per month, so revisiting a month is free.
+   */
+  const [pickerMonth, setPickerMonth] = useState(() => {
+    const base = date ?? new Date();
+    return { year: base.getFullYear(), month: base.getMonth() };
+  });
+  const holidays = useHolidayCalendar(pickerMonth.year, isBackendSession);
+  const pickerMonthDays = useMyMonthDays(
+    pickerMonth.year,
+    pickerMonth.month + 1,
+    isBackendSession,
+  );
+  const dayMarkers = useMemo(() => {
+    const map = new Map<string, DayMarkerKind>();
+
+    for (const holiday of holidays.data?.holidays ?? []) {
+      const iso = String(holiday.isoDate || holiday.date || '').slice(0, 10);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) continue;
+      const optional =
+        holiday.isOptional ||
+        String(holiday.holidayType || holiday.type || '').toLowerCase() ===
+          'optional';
+      map.set(iso, optional ? 'optional-holiday' : 'holiday');
+    }
+
+    // Written last: an absence is the actionable fact here, and it is what the
+    // employee is looking for.
+    for (const entry of pickerMonthDays.data ?? []) {
+      if (String(entry.status ?? '').toUpperCase() !== 'ABSENT') continue;
+      map.set(
+        dayMarkerKey(pickerMonth.year, pickerMonth.month, entry.day),
+        'absent',
+      );
+    }
+
+    return map;
+  }, [holidays.data, pickerMonthDays.data, pickerMonth]);
+
+  /**
+   * Only an absent day can be regularized, so the picker refuses anything else
+   * and says why — naming the actual reason (holiday, week off, attendance
+   * already recorded) rather than a blanket "invalid date". The server and
+   * evaluateRegularization still re-check; this is the early, specific answer.
+   *
+   * The demo session has no attendance feed, so nothing is vetoed there.
+   */
+  const dateSelectionGuard = useCallback(
+    ({ marker }: { date: Date; day: number; marker: DayMarkerKind | null }) => {
+      if (!isBackendSession) return null;
+      if (marker === 'absent') return null;
+
+      // Every refusal opens the same way, then names the cause — so the rule
+      // reads as one rule with reasons, not several unrelated errors.
+      const lead = 'Regularization is not available for this date.';
+
+      if (pickerMonthDays.isPending) {
+        return `${lead} Attendance for this month is still loading — please try again in a moment.`;
+      }
+      if (marker === 'holiday' || marker === 'optional-holiday') {
+        return `${lead} It is a holiday, so there is no attendance to correct.`;
+      }
+      if (marker === 'week-off') {
+        return `${lead} It is a week off, so there is no attendance to correct.`;
+      }
+      // Future days land here too: they carry no absence either.
+      return `${lead} Only days marked Absent can be regularized.`;
+    },
+    [isBackendSession, pickerMonthDays.isPending],
+  );
 
   // Existing regularizations drive both the duplicate check and the cap.
   const existing = useMyRegularizations(isBackendSession);
@@ -393,7 +493,7 @@ export default function Regularize() {
   );
 
   const handleReasonFocus = () => {
-    const target = findNodeHandle(reasonRef.current);
+    const target = focusTargetHandle(reasonRef.current);
     reasonTargetRef.current = target;
     scrollReasonToKeyboard(target);
   };
@@ -411,6 +511,7 @@ export default function Regularize() {
           name: asset.name,
           uri: asset.uri,
           mimeType: asset.mimeType,
+          file: asset.file,
         });
       }
     } catch {
@@ -566,6 +667,12 @@ export default function Regularize() {
               // Today's attendance is only final once the shift ends, so the
               // latest regularizable day is yesterday.
               maximumDate={lastRegularizableDate}
+              markers={dayMarkers}
+              weekOffWeekdays={leaveSettings.calendar.weekOffDays}
+              selectionGuard={dateSelectionGuard}
+              onVisibleMonthChange={(year, month) =>
+                setPickerMonth({ year, month })
+              }
               onChange={setDate}
             />
           </View>

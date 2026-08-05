@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { View } from 'react-native';
 import Animated, {
   Easing,
@@ -18,6 +18,10 @@ import ProfileCompletionCard, {
   type ProfileCompletionProps,
 } from '../../../src/components/ProfileCompletionCard';
 import ProfileCompletionOverlay from '../../../src/components/ProfileCompletionOverlay';
+import {
+  hasShownProfilePopup,
+  markProfilePopupShown,
+} from '../../../src/components/profile/profilePopupLatch';
 import { EXIT_DURATION, EXIT_EASING, LAND_RISE } from '../../../src/components/morphTiming';
 import { useModuleGate } from '../../../src/api/modules';
 import { useProfileCompletion } from '../../../src/api/profile';
@@ -27,10 +31,6 @@ import LeaveBalanceCard from '../../../src/components/LeaveBalanceCard';
 import AttendanceCalendarCard from '../../../src/components/AttendanceCalendarCard';
 import PendingApprovalsCard from '../../../src/components/PendingApprovalsCard';
 import QuickActionsCard from '../../../src/components/quickActions/QuickActionsCard';
-
-// Shown once per app launch while the profile is incomplete. This module-level
-// latch resets when the app process restarts, so it reappears next open.
-let popupShownThisLaunch = false;
 
 /**
  * Holds the home-screen profile card. While the popup is open this renders
@@ -133,12 +133,26 @@ export default function Index() {
 
   const [showPopup, setShowPopup] = useState(false);
   // The popup decision has to wait for the query, so it cannot be a useState
-  // initialiser. Still fires at most once per launch.
+  // initialiser. Fires at most once per sign-in: the latch is persisted, so
+  // remounting this screen, reloading the web page or relaunching the app all
+  // find it already set and leave the popup closed until the next session.
+  //
+  // The ref keeps it to one decision per mount — the latch read is async, so
+  // without it a re-render arriving mid-read could start a second check that
+  // also sees "not shown" and opens the popup twice.
+  const popupDecided = useRef(false);
   useEffect(() => {
-    if (profileIncomplete && !popupShownThisLaunch) {
-      popupShownThisLaunch = true;
-      setShowPopup(true);
-    }
+    if (!profileIncomplete || popupDecided.current) return;
+    popupDecided.current = true;
+    let active = true;
+    void (async () => {
+      if (await hasShownProfilePopup()) return;
+      await markProfilePopupShown();
+      if (active) setShowPopup(true);
+    })();
+    return () => {
+      active = false;
+    };
   }, [profileIncomplete]);
   // Flips true the moment dismiss starts, so the home card lands while the
   // overlay card is still flying up. `showPopup` stays true until the overlay

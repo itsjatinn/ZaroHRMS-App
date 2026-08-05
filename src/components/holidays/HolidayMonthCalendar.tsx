@@ -2,6 +2,7 @@ import { ChevronLeft, ChevronRight } from 'lucide-react-native';
 import { useMemo } from 'react';
 import { Pressable, Text, View } from 'react-native';
 
+import { buildMonthWeeks } from '../calendar/MonthCalendar';
 import { cardShadow } from '../shadow';
 import {
   accentColor,
@@ -24,21 +25,6 @@ type HolidayMonthCalendarProps = {
   onSelectDay: (day: number | null) => void;
 };
 
-/** Weeks of seven cells; null pads the lead-in and the tail. */
-function buildWeeks(year: number, monthIndex: number) {
-  const daysInMonth = new Date(year, monthIndex + 1, 0).getDate();
-  const firstWeekday = new Date(year, monthIndex, 1).getDay();
-  const cells: (number | null)[] = [
-    ...Array.from({ length: firstWeekday }, () => null),
-    ...Array.from({ length: daysInMonth }, (_, i) => i + 1),
-  ];
-  while (cells.length % 7 !== 0) cells.push(null);
-
-  return Array.from({ length: cells.length / 7 }, (_, row) =>
-    cells.slice(row * 7, row * 7 + 7),
-  );
-}
-
 // The month card from the web calendar: chevron month nav, weekday header and
 // bordered day cells that carry a tint for holidays and week-offs. A phone cell
 // is too narrow for the web's full-name pill, so the name is clipped here and
@@ -54,7 +40,7 @@ export default function HolidayMonthCalendar({
   onSelectDay,
 }: HolidayMonthCalendarProps) {
   const weeks = useMemo(
-    () => buildWeeks(year, monthIndex),
+    () => buildMonthWeeks(year, monthIndex),
     [year, monthIndex],
   );
 

@@ -16,6 +16,10 @@ import {
   useMyLeaveRequests,
 } from '../../src/api/leave';
 import { useHolidayCalendar } from '../../src/api/holidays';
+import {
+  dayMarkerKey,
+  type DayMarkerKind,
+} from '../../src/components/calendar/dayMarkers';
 import { useAuth } from '../../src/auth/AuthContext';
 import AppScrollView from '../../src/components/AppScrollView';
 import LeaveForm from '../../src/components/leave/LeaveForm';
@@ -139,6 +143,8 @@ export default function LeaveApplicationScreen() {
     name: string;
     uri: string;
     mimeType?: string | null;
+    /** Set on web only; the upload needs the real File there. */
+    file?: File | null;
   } | null>(null);
   const [success, setSuccess] = useState<SuccessDetail[] | null>(null);
   // Covers the whole round trip — the attachment upload runs before the
@@ -193,6 +199,67 @@ export default function LeaveApplicationScreen() {
     }
     return keys;
   }, [holidays.data]);
+
+  /**
+   * What the date sheet paints on each day. Built from the two feeds this
+   * screen already loads, so it costs no extra request: holidays (optional
+   * ones kept separate, since they are only days off once claimed) and the
+   * employee's own requests.
+   *
+   * Applying over a holiday, or over a day already requested, is the most
+   * common wasted submission — the picker can say so before the form does.
+   */
+  const dayMarkers = useMemo(() => {
+    const map = new Map<string, DayMarkerKind>();
+
+    for (const holiday of holidays.data?.holidays ?? []) {
+      const iso = String(holiday.isoDate || holiday.date || '').slice(0, 10);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) continue;
+      const optional =
+        holiday.isOptional ||
+        String(holiday.holidayType || holiday.type || '').toLowerCase() ===
+          'optional';
+      map.set(iso, optional ? 'optional-holiday' : 'holiday');
+    }
+
+    // Requests are written after holidays: a day the employee has already
+    // booked is the more actionable fact when the two collide.
+    for (const request of existingRequests.data ?? []) {
+      const status = String(request.status ?? '').toUpperCase();
+      // A withdrawal awaiting HR still holds its days, so it reads as
+      // approved until that decision lands. Rejected and cancelled requests
+      // never reach here — the hook filters them out.
+      const kind: DayMarkerKind | null =
+        status === 'PENDING'
+          ? 'pending-leave'
+          : status === 'APPROVED' || status === 'CANCELLATION_REQUESTED'
+            ? 'approved-leave'
+            : null;
+      if (!kind) continue;
+
+      const start = request.startDate ? new Date(request.startDate) : null;
+      const end = request.endDate ? new Date(request.endDate) : start;
+      if (!start || Number.isNaN(start.getTime())) continue;
+      if (!end || Number.isNaN(end.getTime())) continue;
+
+      for (
+        const cursor = new Date(
+          start.getFullYear(),
+          start.getMonth(),
+          start.getDate(),
+        );
+        cursor <= end;
+        cursor.setDate(cursor.getDate() + 1)
+      ) {
+        map.set(
+          dayMarkerKey(cursor.getFullYear(), cursor.getMonth(), cursor.getDate()),
+          kind,
+        );
+      }
+    }
+
+    return map;
+  }, [holidays.data, existingRequests.data]);
 
   // Chargeable days and every policy check, computed by the shared rules in
   // leavePolicy.ts so this screen only has to render the verdict.
@@ -256,7 +323,12 @@ export default function LeaveApplicationScreen() {
         const asset = result.assets[0];
         const name =
           asset.fileName ?? asset.uri.split('/').pop() ?? 'attachment';
-        setAttachment({ name, uri: asset.uri, mimeType: asset.mimeType });
+        setAttachment({
+          name,
+          uri: asset.uri,
+          mimeType: asset.mimeType,
+          file: asset.file,
+        });
       }
     } catch {
       Alert.alert('Could not open the file picker.');
@@ -290,9 +362,8 @@ export default function LeaveApplicationScreen() {
         dayCount: daysSelected,
         fromSession: fromDuration === 'Half Day' ? 'first-half' : 'full',
         toSession: toDuration === 'Half Day' ? 'first-half' : 'full',
-        // Only sent once the LOP dialog has been confirmed — the server
-        // rejects over-balance requests without it.
-        ...(evaluation.lopDays > 0 ? { acceptLop: true } : {}),
+        // The LOP dialog stays a client-side confirmation only: the server has
+        // no opt-in field for it, and sending one is rejected outright.
         reason: reason.trim(),
         attachment: stored,
       });
@@ -370,6 +441,8 @@ export default function LeaveApplicationScreen() {
       onPickFile={pickFile}
       attempted={attempted}
       daysSelected={daysSelected}
+      dayMarkers={dayMarkers}
+      weekOffWeekdays={policy.calendar.weekOffDays}
       onApply={applyLeave}
       submitting={submitting}
     />

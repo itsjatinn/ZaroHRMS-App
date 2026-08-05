@@ -1,7 +1,13 @@
 import { CalendarDays, Search, X } from 'lucide-react-native';
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert } from '../../src/components/CrossAlert';
-import { Pressable, Text, TextInput, View } from 'react-native';
+import {
+  Pressable,
+  ScrollView,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 import {
   SafeAreaView,
   useSafeAreaInsets,
@@ -89,10 +95,45 @@ export default function Events() {
     });
   }, [holidays, query, type]);
 
-  const upcomingCount = useMemo(
-    () => filtered.filter((h) => !isPast(h.date, today)).length,
-    [filtered, today],
-  );
+  /**
+   * The year's calendar starts in January, so by mid-year the screen opened on
+   * months that had already been and gone. Split at today and open on the
+   * upcoming half; the past stays above, one scroll up.
+   */
+  const { past, upcoming } = useMemo(() => {
+    const before: CalendarHoliday[] = [];
+    const after: CalendarHoliday[] = [];
+    for (const holiday of filtered) {
+      (isPast(holiday.date, today) ? before : after).push(holiday);
+    }
+    return { past: before, upcoming: after };
+  }, [filtered, today]);
+
+  const upcomingCount = upcoming.length;
+
+  const scrollRef = useRef<ScrollView>(null);
+  /** Y of the upcoming section, measured once it has laid out. */
+  const upcomingOffsetRef = useRef<number | null>(null);
+  /** One jump per visit — re-running would fight the employee's own scrolling. */
+  const jumpedRef = useRef(false);
+
+  const jumpToUpcoming = useCallback(() => {
+    if (jumpedRef.current) return;
+    const y = upcomingOffsetRef.current;
+    // Nothing to skip past, or not measured yet.
+    if (y == null || y <= 0) return;
+    jumpedRef.current = true;
+    // Not animated: this is the screen's starting position, not a movement
+    // the employee asked for, and a scroll animation on open reads as a glitch.
+    scrollRef.current?.scrollTo({ y, animated: false });
+  }, []);
+
+  // A new filter or search makes the split meaningless, so allow one more jump
+  // against the new list rather than stranding them in the old position.
+  useEffect(() => {
+    jumpedRef.current = false;
+    upcomingOffsetRef.current = null;
+  }, [type, query]);
 
   const claimed = useMemo(
     () =>
@@ -217,6 +258,7 @@ export default function Events() {
       </View>
 
       <AppScrollView
+        ref={scrollRef}
         className="flex-1"
         contentContainerClassName="px-4 pt-4 gap-5"
         contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}
@@ -236,22 +278,58 @@ export default function Events() {
                 {upcomingCount} upcoming
               </Text>
             </View>
-            <View className="flex-row flex-wrap justify-between gap-y-3">
-              {filtered.map((h) => (
-                <HolidayGridCard
-                  key={h.id}
-                  holiday={h}
-                  past={isPast(h.date, today)}
-                  // Only optional holidays are claimable, so only they open the
-                  // details sheet; fixed office-closures are non-interactive.
-                  onPress={h.type === 'optional' ? setSelected : undefined}
-                />
-              ))}
-              {/* Keeps a lone last card left-aligned instead of stretched. */}
-              {filtered.length % 2 === 1 ? (
-                <View className="w-[48.5%]" />
-              ) : null}
-            </View>
+            {past.length > 0 ? (
+              <View className="flex-row flex-wrap justify-between gap-y-3">
+                {past.map((h) => (
+                  <HolidayGridCard
+                    key={h.id}
+                    holiday={h}
+                    past
+                    // Only optional holidays are claimable, so only they open
+                    // the details sheet; fixed office-closures are inert.
+                    onPress={h.type === 'optional' ? setSelected : undefined}
+                  />
+                ))}
+                {/* Keeps a lone last card left-aligned instead of stretched. */}
+                {past.length % 2 === 1 ? <View className="w-[48.5%]" /> : null}
+              </View>
+            ) : null}
+
+            {/* The anchor the screen opens on. Measured rather than computed:
+                card heights depend on the holiday name wrapping, so the only
+                reliable offset is the one layout reports. */}
+            {upcoming.length > 0 ? (
+              <View
+                onLayout={(e) => {
+                  upcomingOffsetRef.current = e.nativeEvent.layout.y;
+                  jumpToUpcoming();
+                }}
+              >
+                {past.length > 0 ? (
+                  <View className="mb-3 mt-5 flex-row items-center gap-3">
+                    <View className="h-px flex-1 bg-slate-200" />
+                    <Text className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                      Upcoming
+                    </Text>
+                    <View className="h-px flex-1 bg-slate-200" />
+                  </View>
+                ) : null}
+
+                <View className="flex-row flex-wrap justify-between gap-y-3">
+                  {upcoming.map((h) => (
+                    <HolidayGridCard
+                      key={h.id}
+                      holiday={h}
+                      past={false}
+                      onPress={h.type === 'optional' ? setSelected : undefined}
+                    />
+                  ))}
+                  {upcoming.length % 2 === 1 ? (
+                    <View className="w-[48.5%]" />
+                  ) : null}
+                </View>
+              </View>
+            ) : null}
           </View>
         )}
 

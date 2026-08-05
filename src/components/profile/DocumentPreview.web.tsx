@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 
 import { cardShadow } from '../shadow';
+import { usePreviewBodyHeight } from './usePreviewBodyHeight';
 
 /**
  * Web twin of DocumentPreview. Identical chrome and props — the only
@@ -46,6 +47,13 @@ export function isPdf(mimeType: string) {
 export default function DocumentPreview({ target, loading = false, onClose }: Props) {
   const { width, height } = useWindowDimensions();
   const open = Boolean(target) || loading;
+  const cardWidth = width * 0.92;
+  const bodyHeight = usePreviewBodyHeight({
+    target,
+    loading,
+    cardWidth,
+    screenHeight: height,
+  });
 
   return (
     <Modal visible={open} transparent animationType="fade" onRequestClose={onClose}>
@@ -55,7 +63,7 @@ export default function DocumentPreview({ target, loading = false, onClose }: Pr
         onPress={onClose}
       >
         <Pressable
-          style={[cardShadow, { width: width * 0.92, maxHeight: height * 0.8 }]}
+          style={[cardShadow, { width: cardWidth, maxHeight: height * 0.8 }]}
           className="overflow-hidden rounded-[24px] bg-white"
         >
           <View className="flex-row items-center gap-3 border-b border-slate-100 px-4 py-3">
@@ -73,7 +81,11 @@ export default function DocumentPreview({ target, loading = false, onClose }: Pr
             </Pressable>
           </View>
 
-          <View style={{ height: height * 0.62 }} className="bg-slate-50">
+          {/* Fitted to the file: an image's own aspect ratio at this width,
+              a fixed frame for a PDF, and just a couple of lines for the
+              can't-preview message. Always under the card's maxHeight, so the
+              header can never be pushed off. */}
+          <View style={{ height: bodyHeight }} className="bg-slate-50">
             {loading || !target ? (
               <View className="flex-1 items-center justify-center">
                 <ActivityIndicator color="#14323F" />

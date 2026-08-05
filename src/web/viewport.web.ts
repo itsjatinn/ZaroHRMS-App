@@ -30,11 +30,31 @@ export function lockViewportToDesignWidth(): void {
   const meta = document.querySelector('meta[name="viewport"]');
   if (!meta) return;
 
+  /**
+   * Width actually available to the page.
+   *
+   * screen.width alone is the whole display, and the page does not always own
+   * it: split-screen, an in-app/WebView browser, a resized desktop window and
+   * device emulation all hand the page less. Scaling the 390px layout up to
+   * the display then makes it wider than the window — and because global.css
+   * sets `overflow-x: hidden`, the excess is clipped outright rather than
+   * panned, which is the UI "cropping" this is meant to prevent.
+   *
+   * innerWidth alone is no good either: once the viewport is pinned below it
+   * reports DESIGN_WIDTH, so feeding it back in would drift on every
+   * re-measure. Hence the narrower of the two, measured only while the
+   * viewport is unpinned (see measureThenApply).
+   */
+  const availableWidth = () => {
+    const screenWidth = window.screen?.width || 0;
+    const windowWidth = window.innerWidth || 0;
+    if (!screenWidth) return windowWidth || DESIGN_WIDTH;
+    if (!windowWidth) return screenWidth;
+    return Math.min(screenWidth, windowWidth);
+  };
+
   const apply = () => {
-    // screen.width is the device's own CSS width and is unaffected by the
-    // scaling applied below. Reading innerWidth instead would feed our own
-    // output back in and drift further on every orientation change.
-    const deviceWidth = window.screen?.width || window.innerWidth;
+    const deviceWidth = availableWidth();
 
     if (deviceWidth >= PHONE_MAX) {
       meta.setAttribute('content', DEVICE_WIDTH_VIEWPORT);
@@ -56,8 +76,22 @@ export function lockViewportToDesignWidth(): void {
     );
   };
 
+  /**
+   * Re-measure with the viewport unpinned, so innerWidth reports the real
+   * window instead of the DESIGN_WIDTH we ourselves put there. The first call
+   * can measure directly — +html.tsx ships `width=device-width`, so nothing
+   * has pinned it yet.
+   */
+  const measureThenApply = () => {
+    meta.setAttribute('content', DEVICE_WIDTH_VIEWPORT);
+    // A frame, so the browser applies the reset before innerWidth is read.
+    window.requestAnimationFrame(apply);
+  };
+
   apply();
   // Portrait and landscape have different device widths, so a phone rotated
   // into landscape can cross PHONE_MAX and should get its real viewport back.
-  window.addEventListener('orientationchange', apply);
+  window.addEventListener('orientationchange', measureThenApply);
+  // Deliberately NOT listening to `resize`: setting the meta above itself
+  // fires one, so re-measuring on it would drive a reset/apply loop.
 }

@@ -36,6 +36,9 @@ const FILTERS = [
 ] as const;
 type Filter = (typeof FILTERS)[number];
 
+/** Sentinel for "no leave-type filter" — tenant types are arbitrary strings. */
+const ANY_TYPE = 'All';
+
 /** Statuses an employee can still withdraw. */
 const CANCELLABLE: RequestStatus[] = ['Pending', 'Approved'];
 
@@ -60,6 +63,7 @@ export default function AllRequestsScreen() {
   const requestsQuery = useMyRequests(isBackendSession);
   const cancelRequest = useCancelMyRequest();
   const [filter, setFilter] = useState<Filter>('All');
+  const [typeFilter, setTypeFilter] = useState<string>(ANY_TYPE);
   const [filterOpen, setFilterOpen] = useState(false);
   const [year, setYear] = useState<string>('2026');
   const [cancelTarget, setCancelTarget] = useState<Request | null>(null);
@@ -128,13 +132,46 @@ export default function AllRequestsScreen() {
     [requestsForYear],
   );
 
+  /**
+   * Leave types are tenant-defined, so the options are whatever this year's
+   * feed actually contains. Scoped to the year for the same reason the status
+   * counts are: the list on screen is already year-filtered, so offering a
+   * type that only exists in another year would filter to nothing.
+   */
+  const leaveTypes = useMemo(() => {
+    const counted = new Map<string, number>();
+    for (const request of requestsForYear) {
+      const label = request.type?.trim();
+      if (!label) continue;
+      counted.set(label, (counted.get(label) ?? 0) + 1);
+    }
+    return [...counted.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+  }, [requestsForYear]);
+
+  // Switching year (or a refetch) can drop the selected type. Left alone the
+  // list would sit empty against a filter no longer offered.
+  const activeType =
+    typeFilter === ANY_TYPE || leaveTypes.some(([label]) => label === typeFilter)
+      ? typeFilter
+      : ANY_TYPE;
+
   const visible = useMemo(
     () =>
-      filter === 'All'
-        ? requestsForYear
-        : requestsForYear.filter((r) => r.status === filter),
-    [filter, requestsForYear],
+      requestsForYear.filter(
+        (r) =>
+          (filter === 'All' || r.status === filter) &&
+          (activeType === ANY_TYPE || r.type === activeType),
+      ),
+    [filter, activeType, requestsForYear],
   );
+
+  /** "pending · Sick Leave", or empty when nothing is filtered. */
+  const activeFilterSummary = [
+    filter === 'All' ? null : filter.toLowerCase(),
+    activeType === ANY_TYPE ? null : activeType,
+  ]
+    .filter(Boolean)
+    .join(' · ');
 
   // Consecutive requests sharing a month collapse under one section header
   // (the feed is already ordered newest-first).
@@ -220,6 +257,8 @@ export default function AllRequestsScreen() {
                     status={r.status}
                     icon={r.icon}
                     rejectionReason={r.rejectionReason}
+                    attachments={r.attachments}
+                    requestId={isBackendSession ? r.id : undefined}
                     onCancel={
                       CANCELLABLE.includes(r.status)
                         ? () => setCancelTarget(r)
@@ -236,10 +275,15 @@ export default function AllRequestsScreen() {
               <CalendarX size={26} color="#94A3B8" />
             </View>
             <Text className="text-base font-bold text-ink">
-              No {filter.toLowerCase()} requests
+              No requests found
             </Text>
             <Text className="px-10 text-center text-sm text-slate-400">
-              You have no {filter.toLowerCase()} leave requests in {year}.
+              {/* Name the filters actually in play. The old copy interpolated
+                  the status unconditionally, which read as "no all requests",
+                  and it never mentioned the type at all. */}
+              {activeFilterSummary
+                ? `Nothing matches ${activeFilterSummary} in ${year}.`
+                : `You have no leave requests in ${year}.`}
             </Text>
           </View>
         )}
@@ -249,12 +293,33 @@ export default function AllRequestsScreen() {
         onKeep={() => setCancelTarget(null)}
         onConfirm={confirmCancel}
       />
+      {/* Status + leave type in one sheet. With `sections` it stays open until
+          dismissed, so both can be set in a single visit. */}
       <FilterSheet
         visible={filterOpen}
         title="Requests"
         value={filter}
-        options={FILTERS.map((f) => ({ value: f, label: f }))}
-        onChange={setFilter}
+        sections={[
+          {
+            title: 'Status',
+            value: filter,
+            options: FILTERS.map((f) => ({ value: f, label: f })),
+            onChange: (next) => setFilter(next as Filter),
+          },
+          {
+            title: 'Leave type',
+            value: activeType,
+            options: [
+              { value: ANY_TYPE, label: 'All' },
+              ...leaveTypes.map(([label, count]) => ({
+                value: label,
+                label,
+                count,
+              })),
+            ],
+            onChange: setTypeFilter,
+          },
+        ]}
         onClose={() => setFilterOpen(false)}
       />
     </SafeAreaView>

@@ -7,6 +7,7 @@ import {
   type LucideIcon,
 } from 'lucide-react-native';
 
+import type { RequestAttachment } from '../../api/leave';
 import type { RequestStatus } from './RequestCard';
 
 export type Request = {
@@ -26,6 +27,8 @@ export type Request = {
   status: RequestStatus;
   icon: LucideIcon;
   rejectionReason?: string; // shown collapsibly on rejected cards
+  /** Proof files, positionally indexed by the download endpoint. */
+  attachments?: RequestAttachment[];
 };
 
 // Shared leave-request feed used by the Leave overview and the "All requests"
@@ -211,5 +214,8 @@ export function toRequest(row: MyLeaveRequest): Request {
     appliedOn: shortDate(row.createdAt),
     actionDate: shortDate(row.actionedAt),
     rejectionReason: row.decisionNote ?? undefined,
+    // Index matters: the download endpoint addresses attachments by position,
+    // so the array order has to survive as-is.
+    attachments: row.attachments?.length ? row.attachments : undefined,
   };
 }

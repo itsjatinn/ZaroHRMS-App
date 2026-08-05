@@ -259,6 +259,8 @@ export function useUploadMyDocument() {
       uri: string;
       name: string;
       mimeType?: string | null;
+      /** Set by the pickers on web only; the upload needs the real File there. */
+      file?: File | null;
       category: DocCategory;
       /** Reuse the row's existing type on replace, so it supersedes cleanly. */
       documentType?: string;
@@ -266,12 +268,19 @@ export function useUploadMyDocument() {
       templateFieldKey?: string;
     }) => {
       const form = new FormData();
-      // React Native's FormData takes this {uri,name,type} shape for files.
-      form.append('file', {
-        uri: input.uri,
-        name: input.name,
-        type: input.mimeType || 'application/octet-stream',
-      } as unknown as Blob);
+      if (input.file) {
+        // Web: FormData only accepts a string or a real Blob/File — the React
+        // Native shape below stringifies to "[object Object]", leaving the
+        // server with a text field and no file.
+        form.append('file', input.file, input.name);
+      } else {
+        // React Native's FormData takes this {uri,name,type} shape for files.
+        form.append('file', {
+          uri: input.uri,
+          name: input.name,
+          type: input.mimeType || 'application/octet-stream',
+        } as unknown as Blob);
+      }
       form.append(
         'documentType',
         input.documentType ||

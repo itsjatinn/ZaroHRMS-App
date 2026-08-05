@@ -13,10 +13,13 @@ import { logout as logoutRequest, type AuthTenant, type AuthUser } from '../api/
 import {
   getAccessToken,
   restoreAccessToken,
+  restoreTenantSlug,
   setAccessToken,
+  setTenantSlug,
   setUnauthorizedHandler,
 } from '../api/client';
 import { queryClient, queryPersister } from '../api/queryClient';
+import { clearProfilePopupLatch } from '../components/profile/profilePopupLatch';
 import type { UserRole } from './demoCredentials';
 
 // Keys under which auth state is persisted in the device keychain. The access
@@ -95,8 +98,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             getItem(ROLE_KEY),
             getItem(PROFILE_KEY),
           ]);
-        // Hand the API client its bearer token before any screen renders.
-        await restoreAccessToken();
+        // Hand the API client its bearer token — and the tenant slug its
+        // silent refresh has to quote — before any screen renders.
+        await Promise.all([restoreAccessToken(), restoreTenantSlug()]);
         if (active) {
           setSession(savedSession);
           setOrgSlug(savedSlug);
@@ -131,6 +135,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // A backend session's token is the bearer the API client sends; the demo
       // session deliberately leaves the client without one.
       await setAccessToken(token === DEMO_SESSION_TOKEN ? null : token);
+      // The slug /auth/refresh must quote. Prefer the tenant the backend
+      // confirmed at login over the string typed into the org field, which may
+      // differ in case or be a stale value left from a previous sign-in.
+      await setTenantSlug(options?.tenant?.slug?.trim() || slug || null);
+      // A new session gets the profile popup once. Reset here as well as in
+      // signOut so switching accounts still shows it even if the previous
+      // session ended without a clean sign-out.
+      await clearProfilePopupLatch();
       try {
         await setItem(SESSION_KEY, token);
         await setItem(ROLE_KEY, role);
@@ -166,11 +178,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // token synchronously, so the request still carries the current bearer.
     if (getAccessToken()) void logoutRequest().catch(() => undefined);
     await setAccessToken(null);
+    await setTenantSlug(null);
     try {
       await Promise.all([
         removeItem(SESSION_KEY),
         removeItem(ROLE_KEY),
         removeItem(PROFILE_KEY),
+        clearProfilePopupLatch(),
       ]);
     } catch {
       // Ignore; clear in-memory session regardless.

@@ -1,6 +1,3 @@
-import DateTimePicker, {
-  type DateTimePickerEvent,
-} from '../CrossDatePicker';
 import { CalendarDays, FileText } from 'lucide-react-native';
 import { useRef, useState, type ReactNode } from 'react';
 import {
@@ -9,12 +6,15 @@ import {
   Text,
   TextInput,
   View,
-  findNodeHandle,
 } from 'react-native';
 
+import CalendarDateSheet from '../calendar/CalendarDateSheet';
+import type { DayMarkerKind } from '../calendar/dayMarkers';
+import { focusTargetHandle } from '../nodeHandle';
 import AttachmentField from '../requests/AttachmentField';
 import ReasonCounter from '../requests/ReasonCounter';
 import { REASON_MAX_LENGTH } from '../requests/requestReason';
+import { startOfDay } from './leaveData';
 import { cardShadow } from '../shadow';
 import Dropdown from './Dropdown';
 import {
@@ -46,6 +46,10 @@ type LeaveFormProps = {
   onPickFile: () => void;
   attempted: boolean; // user pressed Apply at least once
   daysSelected: number;
+  /** Days the date sheet should call out, keyed `yyyy-mm-dd`. */
+  dayMarkers?: Map<string, DayMarkerKind>;
+  /** Weekday indexes that are non-working, from the tenant's calendar. */
+  weekOffWeekdays?: number[];
   onApply: () => void;
   /** Disables the button and swaps in a spinner while the request is in flight. */
   submitting?: boolean;
@@ -110,6 +114,8 @@ export default function LeaveForm({
   onPickFile,
   attempted,
   daysSelected,
+  dayMarkers,
+  weekOffWeekdays,
   onApply,
   submitting = false,
 }: LeaveFormProps) {
@@ -117,12 +123,30 @@ export default function LeaveForm({
   const reasonRef = useRef<TextInput>(null);
   const [picker, setPicker] = useState<'from' | 'to' | null>(null);
 
-  const handlePicked = (event: DateTimePickerEvent, date?: Date) => {
-    const which = picker;
-    setPicker(null);
-    if (event.type === 'dismissed' || !date) return;
-    if (which === 'from') onFromDate(date);
-    else if (which === 'to') onToDate(date);
+  /**
+   * Neither sheet disables anything, so the start and end calendars look
+   * identical — greying out most of the month on the end picker made it read
+   * as a different, broken calendar. An out-of-order pick is resolved instead
+   * of forbidden: choosing an end before the start re-anchors the range rather
+   * than doing nothing when tapped.
+   */
+  const handlePicked = (date: Date) => {
+    const picked = startOfDay(date);
+    if (picker === 'from') {
+      onFromDate(date);
+      // An end date that now precedes the start would be invalid; collapse it
+      // onto the new start rather than leaving an impossible range.
+      if (toDate && picked > startOfDay(toDate)) onToDate(date);
+      return;
+    }
+    if (picker === 'to') {
+      if (fromDate && picked < startOfDay(fromDate)) {
+        onFromDate(date);
+        onToDate(fromDate);
+        return;
+      }
+      onToDate(date);
+    }
   };
 
   return (
@@ -221,7 +245,7 @@ export default function LeaveForm({
           ref={reasonRef}
           value={reason}
           onChangeText={onReason}
-          onFocus={() => onReasonFocus?.(findNodeHandle(reasonRef.current))}
+          onFocus={() => onReasonFocus?.(focusTargetHandle(reasonRef.current))}
           placeholder="Share the reason for your leave request."
           placeholderTextColor="#94A3B8"
           multiline
@@ -260,14 +284,17 @@ export default function LeaveForm({
         </Pressable>
       </View>
 
-      {picker && (
-        <DateTimePicker
-          mode="date"
-          value={(picker === 'from' ? fromDate : toDate) ?? fromDate ?? new Date()}
-          minimumDate={picker === 'to' ? fromDate ?? undefined : undefined}
-          onChange={handlePicked}
-        />
-      )}
+      {/* No minimumDate: handlePicked reorders an out-of-order range, so both
+          sheets show a full, identically-styled month. */}
+      <CalendarDateSheet
+        visible={picker !== null}
+        title={picker === 'to' ? 'Select end date' : 'Select start date'}
+        value={(picker === 'from' ? fromDate : toDate) ?? fromDate ?? null}
+        markers={dayMarkers}
+        weekOffWeekdays={weekOffWeekdays}
+        onSelect={handlePicked}
+        onClose={() => setPicker(null)}
+      />
     </View>
   );
 }

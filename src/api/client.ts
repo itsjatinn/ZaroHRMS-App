@@ -8,6 +8,13 @@ import { getItem, removeItem, setItem } from '../auth/secureStorage';
 /** Access token in the device keychain — restored on launch. */
 const ACCESS_TOKEN_KEY = 'zaro.accessToken';
 
+/**
+ * Tenant slug of the signed-in session. Kept here, beside the token, because
+ * POST /auth/refresh requires it in the body — see refreshAccessToken. Reading
+ * it from AuthContext instead would be circular: AuthContext imports this file.
+ */
+const TENANT_SLUG_KEY = 'zaro.tenantSlug';
+
 /** Requests that hang longer than this are aborted (ms). */
 const REQUEST_TIMEOUT = 20_000;
 
@@ -33,6 +40,7 @@ export class NetworkError extends Error {
 }
 
 let accessToken: string | null = null;
+let tenantSlug: string | null = null;
 let onUnauthorized: (() => void) | null = null;
 
 export function getAccessToken() {
@@ -48,6 +56,30 @@ export async function restoreAccessToken() {
     accessToken = null;
   }
   return accessToken;
+}
+
+/**
+ * Restores the session's tenant slug. Must run on app start alongside
+ * restoreAccessToken, or the first refresh after a relaunch has no slug to
+ * send and the session ends at the access token's expiry.
+ */
+export async function restoreTenantSlug() {
+  try {
+    tenantSlug = await getItem(TENANT_SLUG_KEY);
+  } catch {
+    tenantSlug = null;
+  }
+  return tenantSlug;
+}
+
+export async function setTenantSlug(slug: string | null) {
+  tenantSlug = slug;
+  try {
+    if (slug) await setItem(TENANT_SLUG_KEY, slug);
+    else await removeItem(TENANT_SLUG_KEY);
+  } catch {
+    // Ignore persistence failures; the in-memory value still works.
+  }
 }
 
 export async function setAccessToken(token: string | null) {
@@ -98,6 +130,9 @@ async function readError(response: Response) {
 let refreshInFlight: Promise<string | null> | null = null;
 
 async function refreshAccessToken(): Promise<string | null> {
+  // Without a slug the request is a guaranteed 400, so don't spend a round
+  // trip (and the caller's 20s timeout) to be told so.
+  if (!tenantSlug) return null;
   refreshInFlight ??= (async () => {
     // Own timeout rather than the caller's signal: this promise is shared, so
     // one caller aborting must not cancel the refresh for everyone else. Without
@@ -109,7 +144,13 @@ async function refreshAccessToken(): Promise<string | null> {
       const response = await fetch(`${API_URL}/auth/refresh`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: '{}',
+        // tenantSlug is a REQUIRED body field (backend RefreshDto), and the
+        // controller also checks it against the cookie's tenant. Posting `{}`
+        // here was rejected by the validation pipe with a 400 before the
+        // cookie was even read, so every silent refresh failed and the session
+        // ended at the access token's TTL no matter how active the employee
+        // was — which is exactly what "logged out automatically" looked like.
+        body: JSON.stringify({ tenantSlug }),
         signal: timeout.signal,
         // The refresh token is an HttpOnly cookie on the API origin. Native
         // replays it from the cookie jar regardless, but a browser drops it on

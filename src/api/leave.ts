@@ -98,6 +98,15 @@ const BLOCKING_STATUSES = new Set([
   'CANCELLATION_REQUESTED',
 ]);
 
+/**
+ * An overlap range plus the status that produced it. The policy rules only
+ * need the dates, but the apply screen's date picker tints pending and
+ * approved days differently.
+ */
+export type ExistingLeaveRangeWithStatus = ExistingLeaveRange & {
+  status: string;
+};
+
 /** Existing leave requests, used to block overlapping dates. */
 export function useMyLeaveRequests(enabled = true) {
   return useQuery({
@@ -106,7 +115,7 @@ export function useMyLeaveRequests(enabled = true) {
       const rows = await api.get<
         (ExistingLeaveRange & { status?: string })[]
       >('/requests/mine?category=LEAVE', { signal });
-      if (!Array.isArray(rows)) return [] as ExistingLeaveRange[];
+      if (!Array.isArray(rows)) return [] as ExistingLeaveRangeWithStatus[];
       return rows
         .filter((row) =>
           BLOCKING_STATUSES.has(String(row.status ?? '').toUpperCase()),
@@ -116,6 +125,9 @@ export function useMyLeaveRequests(enabled = true) {
           type: row.type,
           startDate: String(row.startDate ?? '').slice(0, 10),
           endDate: String(row.endDate ?? row.startDate ?? '').slice(0, 10),
+          // Kept (the overlap rules ignore it) so the date picker can tell a
+          // pending request from an approved one when it tints the day.
+          status: String(row.status ?? '').toUpperCase(),
         }))
         .filter((row) => row.id && row.startDate && row.endDate);
     },
@@ -387,6 +399,19 @@ export function useMyRegularizations(enabled = true) {
   });
 }
 
+/**
+ * A proof file stored against a request. The server keeps these encoded in the
+ * `reason` column and hands them back already parsed (see extractAttachments
+ * in requests.service.ts) — which is also why `displayReason` exists.
+ */
+export type RequestAttachment = {
+  name: string;
+  /** Already rounded to KB by the server; 0 when the size was not recorded. */
+  sizeKb: number;
+  mimeType?: string;
+  filePath?: string;
+};
+
 /** One leave request as the requests feed returns it. */
 export type MyLeaveRequest = {
   id: string;
@@ -405,6 +430,8 @@ export type MyLeaveRequest = {
   reason?: string;
   /** Reason with the attachment metadata stripped — what the web displays. */
   displayReason?: string;
+  /** Proof files, in the order the download endpoint indexes them. */
+  attachments?: RequestAttachment[];
   /** ISO timestamp of the decision (approval/rejection); null while pending. */
   actionedAt?: string | null;
   leaveType?: { name?: string; code?: string } | null;
