@@ -169,7 +169,7 @@ export default function Announcements() {
         </Pressable>
         <View className="min-w-0 flex-1">
           <Text
-            className="text-center text-[18px] font-bold leading-6 text-ink"
+            className="text-left text-[18px] font-bold leading-6 text-ink"
             numberOfLines={1}
           >
             Announcements

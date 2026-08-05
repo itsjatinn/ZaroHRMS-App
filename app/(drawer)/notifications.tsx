@@ -34,7 +34,9 @@ import {
   type NotificationFilterId,
 } from '../../src/components/notifications/notificationTypes';
 
-const DAY_ORDER = ['Today', 'Yesterday', 'Earlier'] as const;
+/** Recency buckets, newest first. Anything older falls into a month heading
+ *  ("July 2026"), appended in the order the rows arrive (newest first). */
+const DAY_ORDER = ['Today', 'Yesterday', 'This week', 'Earlier this month'] as const;
 
 export default function NotificationsScreen() {
   const router = useRouter();
@@ -81,11 +83,22 @@ export default function NotificationsScreen() {
 
   // Rows bucketed by day, newest bucket first.
   const grouped = useMemo(() => {
+    const byBucket = new Map<string, ServerNotification[]>();
+    // Insertion order = feed order (newest first), which is what month
+    // headings need; the fixed recency buckets are hoisted above them.
+    for (const row of visible) {
+      const key = dayBucket(row.createdAt);
+      const bucket = byBucket.get(key);
+      if (bucket) bucket.push(row);
+      else byBucket.set(key, [row]);
+    }
     const sections: { day: string; items: ServerNotification[] }[] = [];
     for (const day of DAY_ORDER) {
-      const rows = visible.filter((n) => dayBucket(n.createdAt) === day);
-      if (rows.length) sections.push({ day, items: rows });
+      const rows = byBucket.get(day);
+      if (rows?.length) sections.push({ day, items: rows });
+      byBucket.delete(day);
     }
+    for (const [day, items] of byBucket) sections.push({ day, items });
     return sections;
   }, [visible]);
 
@@ -176,15 +189,21 @@ export default function NotificationsScreen() {
                 </View>
               </View>
             ))}
-            <View className="mt-6 gap-2">
+            {/* Side by side — two stacked full-width bars read as a bigger
+                decision than either action deserves. Each flexes so the pair
+                still fills the row when only one is shown. */}
+            <View className="mt-6 flex-row gap-2">
               {unreadCount > 0 ? (
                 <Pressable
                   onPress={() => isBackendSession && markAllRead.mutate(undefined)}
                   accessibilityRole="button"
-                  className="h-11 flex-row items-center justify-center gap-1.5 rounded-[12px] border border-slate-200 bg-white active:opacity-70"
+                  className="h-11 flex-1 flex-row items-center justify-center gap-1.5 rounded-[12px] border border-slate-200 bg-white active:opacity-70"
                 >
                   <CheckCheck size={15} color="#14323F" />
-                  <Text className="text-[13px] font-bold text-ink">
+                  <Text
+                    numberOfLines={1}
+                    className="text-[13px] font-bold text-ink"
+                  >
                     Mark all read
                   </Text>
                 </Pressable>
@@ -192,10 +211,15 @@ export default function NotificationsScreen() {
               <Pressable
                 onPress={confirmClearAll}
                 accessibilityRole="button"
-                className="h-11 flex-row items-center justify-center gap-1.5 rounded-[12px] border border-rose-200 bg-white active:opacity-70"
+                className="h-11 flex-1 flex-row items-center justify-center gap-1.5 rounded-[12px] border border-rose-200 bg-white active:opacity-70"
               >
                 <Trash2 size={15} color="#F43F5E" />
-                <Text className="text-[13px] font-bold text-rose-500">Clear all</Text>
+                <Text
+                  numberOfLines={1}
+                  className="text-[13px] font-bold text-rose-500"
+                >
+                  Clear all
+                </Text>
               </Pressable>
             </View>
           </>

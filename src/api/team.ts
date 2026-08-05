@@ -109,6 +109,7 @@ export function useTeamMembers(enabled = true) {
       return (data?.members ?? []).map((row): TeamMember => {
         const name = row.name?.trim() || 'Employee';
         return {
+          id: row.id,
           initials: initialsOf(name),
           name,
           role: row.designation?.trim() || row.role?.trim() || '—',
@@ -121,6 +122,117 @@ export function useTeamMembers(enabled = true) {
         };
       });
     },
+    staleTime: 60_000,
+    enabled,
+  });
+}
+
+/* ----------------------- team attendance (month grid) ---------------------- */
+
+export type TeamAttendanceDay = {
+  day: number;
+  status?: string | null;
+  /** ABSENT because the punch-OUT never came, not a no-show. */
+  missedPunch?: boolean;
+  /** Punched in after shift start + grace. The day stays Present. */
+  late?: boolean;
+};
+
+/** GET /attendance/employee/:id/month — same payload the web team calendar reads. */
+export type TeamAttendanceMonth = {
+  days?: TeamAttendanceDay[];
+  counts?: {
+    present?: number;
+    absent?: number;
+    leave?: number;
+    wfh?: number;
+    od?: number;
+    wo?: number;
+    halfDay?: number;
+    holiday?: number;
+  };
+  attendancePercent?: number;
+};
+
+/**
+ * One month of attendance for every team member, keyed by employee id — the
+ * same per-employee month endpoint the web's Team Attendance Calendar hits.
+ * Fetched together (allSettled) so one member's failure doesn't blank the
+ * grid; missing members simply render empty cells.
+ */
+export function useTeamAttendanceMonths(
+  members: TeamMember[],
+  year: number,
+  month: number,
+  enabled = true,
+) {
+  const memberIds = members
+    .map((member) => member.id)
+    .sort()
+    .join(',');
+  return useQuery({
+    queryKey: ['team', 'attendance-month', year, month, memberIds] as const,
+    queryFn: async ({ signal }) => {
+      const results = await Promise.allSettled(
+        members.map(async (member) => ({
+          id: member.id,
+          data: await api.get<TeamAttendanceMonth>(
+            `/attendance/employee/${member.id}/month?year=${year}&month=${month}`,
+            { signal },
+          ),
+        })),
+      );
+      const byId: Record<string, TeamAttendanceMonth> = {};
+      for (const result of results) {
+        if (result.status === 'fulfilled' && result.value.data) {
+          byId[result.value.id] = result.value.data;
+        }
+      }
+      return byId;
+    },
+    staleTime: 60_000,
+    enabled: enabled && members.length > 0,
+  });
+}
+
+/* -------------------------- team leave (month bars) ------------------------ */
+
+export type TeamCalendarLeave = {
+  id: string;
+  startDate: string;
+  endDate: string;
+  days: number;
+  status: string;
+  category: string;
+  type: string;
+};
+
+export type TeamLeaveCalendar = {
+  month: string;
+  members?: {
+    id: string;
+    name: string;
+    code?: string | null;
+    designation?: string | null;
+    leaves?: TeamCalendarLeave[];
+  }[];
+  holidays?: { date: string; name: string }[];
+};
+
+/**
+ * The manager team leave calendar — GET /requests/manager/team-calendar, the
+ * same feed behind the web panel's team leave view (approved / pending /
+ * rejected / cancellation-requested bars plus company holidays).
+ */
+export function useTeamLeaveCalendar(year: number, month: number, enabled = true) {
+  const monthParam = `${year}-${String(month).padStart(2, '0')}`;
+  return useQuery({
+    queryKey: ['team', 'leave-calendar', monthParam] as const,
+    queryFn: ({ signal }) =>
+      api.get<TeamLeaveCalendar>(
+        `/requests/manager/team-calendar?month=${monthParam}`,
+        { signal },
+      ),
     staleTime: 60_000,
     enabled,
   });

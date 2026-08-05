@@ -201,8 +201,6 @@ export default function MyTeamScreen() {
             <BackButton title="My team" />
           </View>
 
-          <ViewSwitcher view={view} onChange={setView} />
-
           <View className="flex-row items-center gap-2">
             <View className="min-w-0 flex-1 flex-row items-center rounded-xl border border-slate-200 bg-white px-3">
               <Feather name="search" size={18} color="#94A3B8" />
@@ -227,6 +225,8 @@ export default function MyTeamScreen() {
             <FilterIconButton onPress={() => setFilterOpen(true)} />
           </View>
 
+          <ViewSwitcher view={view} onChange={setView} />
+
           {isBackendSession && teamQuery.isPending ? (
             <PageLoading label="Loading team..." />
           ) : view === 'roster' ? (
@@ -243,7 +243,7 @@ export default function MyTeamScreen() {
                 <Text className="text-xs text-slate-400">{filteredTeam.length} of {roster.length}</Text>
               </View>
               <View className="gap-3">
-                {filteredTeam.map((member) => <TeamMemberCard key={member.employeeId} member={member} />)}
+                {filteredTeam.map((member) => <TeamMemberCard key={member.id} member={member} />)}
                 {filteredTeam.length === 0 ? (
                   <View className="items-center rounded-2xl border border-slate-200 bg-white py-10">
                     <Feather name="users" size={30} color="#CBD5E1" />
@@ -253,9 +253,9 @@ export default function MyTeamScreen() {
               </View>
             </>
           ) : view === 'attendance' ? (
-            <AttendanceCalendar team={filteredTeam} />
+            <AttendanceCalendar team={filteredTeam} isBackendSession={isBackendSession} />
           ) : (
-            <LeaveCalendar team={filteredTeam} />
+            <LeaveCalendar team={filteredTeam} isBackendSession={isBackendSession} />
           )}
         </View>
       </AppScrollView>

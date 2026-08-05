@@ -1,8 +1,30 @@
-import { FileText, GraduationCap, type LucideIcon } from 'lucide-react-native';
+import {
+  BarChart3,
+  FileText,
+  GraduationCap,
+  Link as LinkIcon,
+  Target,
+  type LucideIcon,
+} from 'lucide-react-native';
+// Namespace import so an icon picked BY NAME in the web editor's library
+// resolves here too — lucide-react-native has no `icons` map export.
+import * as lucideAll from 'lucide-react-native';
 import { useMemo, useState } from 'react';
 import * as WebBrowser from 'expo-web-browser';
-import { ActivityIndicator, Linking, Pressable, Text, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Image,
+  Linking,
+  Pressable,
+  Text,
+  View,
+} from 'react-native';
 
+import {
+  useMyQuickLinks,
+  useOrgQuickLinks,
+  type OrgQuickLink,
+} from '../../api/quickLinks';
 import {
   launchSatellite,
   useAvailableSatellites,
@@ -46,7 +68,57 @@ const TILES: {
   },
 ];
 
-/** Home card carrying the web panel's two quick-link tiles. */
+/** Fallback look for HR-published URL links, per catalog id — mirrors the
+ *  web APP_CATALOG so a tile reads the same on both products. */
+const LINK_META: Record<string, { label: string; icon: LucideIcon; color: string; tint: string }> = {
+  pms: {
+    label: 'Performance (PMS)',
+    icon: Target,
+    color: '#A37526',
+    tint: 'rgba(212, 162, 74, 0.22)',
+  },
+  analytics: {
+    label: 'HR Analytics',
+    icon: BarChart3,
+    color: '#3F7B58',
+    tint: 'rgba(94, 155, 123, 0.18)',
+  },
+  custom: {
+    label: 'Link',
+    icon: LinkIcon,
+    color: 'rgba(11, 6, 49, 0.75)',
+    tint: 'rgba(11, 6, 49, 0.08)',
+  },
+};
+
+/** The satellites already have dedicated signed-launch tiles above; their
+ *  org entries carry no URL, so only URL links become extra tiles. */
+function isRenderableOrgLink(link: OrgQuickLink): boolean {
+  return Boolean(link.url) && link.appId !== 'lms' && link.appId !== 'policies';
+}
+
+/** Chip look for an org link, honouring the web's precedence:
+ *  uploaded image → library icon → catalog default, tinted if set. */
+/** Icon-library lookup by PascalCase name ("Rocket"), or null when unknown. */
+function libraryIcon(name?: string): LucideIcon | null {
+  if (!name || !/^[A-Z][A-Za-z0-9]*$/.test(name)) return null;
+  const candidate = (lucideAll as unknown as Record<string, unknown>)[name];
+  return candidate ? (candidate as LucideIcon) : null;
+}
+
+function orgLinkChip(link: OrgQuickLink) {
+  const meta = LINK_META[link.appId] ?? LINK_META.custom;
+  const LibraryIcon = libraryIcon(link.icon);
+  return {
+    Icon: LibraryIcon ?? meta.icon,
+    color: link.tint ?? meta.color,
+    tint: link.tint ? `${link.tint}29` : meta.tint,
+    label: link.label?.trim() || meta.label,
+  };
+}
+
+/** Home "Quick Links" card — the connected-service tiles plus the
+ *  org-published and personal links from the web panel's Quick Links. */
 export default function QuickActionsCard() {
   const { isBackendSession } = useAuth();
   const [launching, setLaunching] = useState<SatelliteKey | null>(null);
@@ -60,6 +132,38 @@ export default function QuickActionsCard() {
     () => new Set((available.data ?? []).map((row) => row.moduleKey)),
     [available.data],
   );
+
+  // HR-published org quick links + the employee's own pins from the web
+  // dashboard — same merge order and de-dup as the web widget (org first).
+  const orgLinks = useOrgQuickLinks(isBackendSession);
+  const myLinks = useMyQuickLinks(isBackendSession);
+  const linkTiles = useMemo(() => {
+    const seen = new Set<string>();
+    const out: OrgQuickLink[] = [];
+    for (const link of [...(orgLinks.data ?? []), ...(myLinks.data ?? [])]) {
+      if (!isRenderableOrgLink(link)) continue;
+      const key = `${link.appId}::${link.url}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(link);
+    }
+    return out;
+  }, [orgLinks.data, myLinks.data]);
+
+  const openLink = async (url: string) => {
+    setError(null);
+    try {
+      await WebBrowser.openBrowserAsync(url, {
+        presentationStyle: WebBrowser.WebBrowserPresentationStyle.FULL_SCREEN,
+      });
+    } catch {
+      try {
+        await Linking.openURL(url);
+      } catch {
+        setError('Could not open the link.');
+      }
+    }
+  };
 
   const open = async (key: SatelliteKey) => {
     if (launching) return;
@@ -118,9 +222,9 @@ export default function QuickActionsCard() {
       style={cardShadow}
       className="gap-4 rounded-[22px] border border-slate-100 bg-white px-5 py-5"
     >
-      <Text className="text-base font-bold text-ink">Quick actions</Text>
+      <Text className="text-base font-bold text-ink">Quick Links</Text>
 
-      <View className="flex-row gap-3">
+      <View className="flex-row flex-wrap gap-3">
         {TILES.map((tile) => {
           const ready = isBackendSession && launchable.has(tile.key);
           const busy = launching === tile.key;
@@ -135,7 +239,7 @@ export default function QuickActionsCard() {
               accessibilityState={{
                 disabled: busy || !isBackendSession || available.isPending,
               }}
-              className="flex-1 items-start gap-2 rounded-xl border bg-white p-3 active:scale-[0.98]"
+              className="w-[47.5%] items-start gap-2 rounded-xl border bg-white p-3 active:scale-[0.98]"
               style={{ borderColor: TILE_BORDER, opacity: ready ? 1 : 0.55 }}
             >
               <View
@@ -154,6 +258,44 @@ export default function QuickActionsCard() {
                 numberOfLines={2}
               >
                 {busy ? 'Opening…' : tile.label}
+              </Text>
+            </Pressable>
+          );
+        })}
+
+        {/* HR-published org links — plain URLs, opened in an in-app tab. */}
+        {linkTiles.map((link, index) => {
+          const chip = orgLinkChip(link);
+          const ChipIcon = chip.Icon;
+          return (
+            <Pressable
+              key={`${link.appId}-${index}`}
+              onPress={() => void openLink(link.url)}
+              accessibilityRole="button"
+              accessibilityLabel={chip.label}
+              className="w-[47.5%] items-start gap-2 rounded-xl border bg-white p-3 active:scale-[0.98]"
+              style={{ borderColor: TILE_BORDER }}
+            >
+              <View
+                className="h-[34px] w-[34px] items-center justify-center rounded-[10px]"
+                style={{ backgroundColor: chip.tint }}
+              >
+                {link.iconImage ? (
+                  <Image
+                    source={{ uri: link.iconImage }}
+                    style={{ width: 20, height: 20, borderRadius: 4 }}
+                    resizeMode="contain"
+                  />
+                ) : (
+                  <ChipIcon size={18} color={chip.color} />
+                )}
+              </View>
+              <Text
+                className="text-[12.5px] font-bold leading-[16px]"
+                style={{ color: BRAND_PRIMARY }}
+                numberOfLines={2}
+              >
+                {chip.label}
               </Text>
             </Pressable>
           );

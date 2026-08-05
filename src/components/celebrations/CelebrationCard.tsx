@@ -153,40 +153,44 @@ export default function CelebrationCard({
         </View>
       </View>
 
-      <Pressable
-        onPress={() => onPressAction?.(celebration)}
-        disabled={wished || !canWish}
-        accessibilityRole="button"
-        accessibilityState={{ disabled: wished || !canWish }}
-        accessibilityLabel={
-          wished
-            ? `Already wished ${celebration.name}`
-            : canWish
-              ? `${meta.action} ${celebration.name}`
-              : 'Wishes are not open yet'
-        }
-        className="flex-row items-center gap-1 self-center rounded-lg border bg-white px-3 py-1.5 active:scale-95"
-        style={
-          wished
-            ? {
-                borderColor: 'rgba(94, 155, 123, 0.45)',
-                backgroundColor: 'rgba(94, 155, 123, 0.14)',
-              }
-            : { borderColor: brandAlpha(0.12) }
-        }
-      >
-        {wished ? (
-          <Check size={13} color="#3F7B58" />
-        ) : (
-          <Send size={13} color={BRAND_PRIMARY} />
-        )}
-        <Text
-          className="text-xs font-bold"
-          style={{ color: wished ? '#3F7B58' : BRAND_PRIMARY }}
+      {/* A not-yet-open celebration shows no control at all: a disabled
+          "Locked" button invited taps that could never work and read as a
+          fault. The card's date, plus the note on the list screen, already
+          say when wishing opens. A sent wish keeps its confirmation. */}
+      {canWish || wished ? (
+        <Pressable
+          onPress={() => onPressAction?.(celebration)}
+          disabled={wished}
+          accessibilityRole="button"
+          accessibilityState={{ disabled: wished }}
+          accessibilityLabel={
+            wished
+              ? `Already wished ${celebration.name}`
+              : `${meta.action} ${celebration.name}`
+          }
+          className="flex-row items-center gap-1 self-center rounded-lg border bg-white px-3 py-1.5 active:scale-95"
+          style={
+            wished
+              ? {
+                  borderColor: 'rgba(94, 155, 123, 0.45)',
+                  backgroundColor: 'rgba(94, 155, 123, 0.14)',
+                }
+              : { borderColor: brandAlpha(0.12) }
+          }
         >
-          {wished ? 'Wished' : canWish ? meta.action : 'Locked'}
-        </Text>
-      </Pressable>
+          {wished ? (
+            <Check size={13} color="#3F7B58" />
+          ) : (
+            <Send size={13} color={BRAND_PRIMARY} />
+          )}
+          <Text
+            className="text-xs font-bold"
+            style={{ color: wished ? '#3F7B58' : BRAND_PRIMARY }}
+          >
+            {wished ? 'Wished' : meta.action}
+          </Text>
+        </Pressable>
+      ) : null}
     </View>
   );
 }

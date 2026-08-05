@@ -152,6 +152,16 @@ export type MonthDay = {
   locked?: boolean;
   /** Punched in with no punch-out yet. */
   open?: boolean;
+  /** Off-day context when a real entry exists on a holiday/week-off. */
+  context?: 'HOLIDAY' | 'WO' | null;
+  /** True when a comp-off credit exists for working this day. */
+  compOff?: boolean;
+  /** Night shift — the punch-out on the NEXT calendar day counts here. */
+  overnight?: boolean;
+  /** Absent because the punch-OUT never came, not a no-show. */
+  missedPunch?: boolean;
+  /** Punched in after shift start + grace. The day stays Present. */
+  late?: boolean;
 };
 
 export function useMyMonthDays(year: number, month: number, enabled = true) {
@@ -206,6 +216,10 @@ export type MonthCalendar = {
   month?: number;
   statusByDay?: Record<string, CalendarDayKind>;
   leaveTypesByDay?: Record<string, string[]>;
+  /** Raw leave state per day ('applied' | 'approved' | 'lop' | 'compoff'). */
+  leaveStatusByDay?: Record<string, string>;
+  /** WFH/ON_DUTY requests per day — drives the work-request overlap ring. */
+  workTypesByDay?: Record<string, string[]>;
 };
 
 /**

@@ -1,4 +1,4 @@
-import { Sparkles } from 'lucide-react-native';
+import { Info, Sparkles } from 'lucide-react-native';
 import { useMemo, useState } from 'react';
 import { Text, View } from 'react-native';
 import { Alert } from '../../src/components/CrossAlert';
@@ -202,6 +202,22 @@ export default function Celebrations() {
             <Text className="text-xs" style={{ color: brandAlpha(0.55) }}>
               {upcoming.length}{' '}
               {upcoming.length === 1 ? 'celebration' : 'celebrations'}
+            </Text>
+          </View>
+
+          {/* Why upcoming cards carry no button — same note as the web panel. */}
+          <View
+            className="mb-3 flex-row items-start gap-1.5 rounded-lg px-2.5 py-2"
+            style={{ backgroundColor: brandAlpha(0.05) }}
+          >
+            <Info size={13} color={brandAlpha(0.55)} style={{ marginTop: 1 }} />
+            <Text
+              className="flex-1 text-[11px] leading-[16px]"
+              style={{ color: brandAlpha(0.7) }}
+            >
+              Wishing opens on the day itself for birthdays and wedding
+              anniversaries. Work anniversaries and new joiners stay open for 7
+              days after the date.
             </Text>
           </View>
 

@@ -76,6 +76,8 @@ export const NOTIFICATION_DESCRIPTORS: Record<string, NotificationDescriptor> = 
   LEAVE_REJECTED: { group: 'Leave', icon: UserX, tone: 'amber' },
   LEAVE_CANCELLATION_REQUESTED: { group: 'Leave', icon: CalendarClock, tone: 'amber' },
   LEAVE_CANCELLATION_DECIDED: { group: 'Leave', icon: CalendarCheck, tone: 'violet' },
+  /** HR credited or debited a balance — carries HR's remark. */
+  LEAVE_BALANCE_ADJUSTED: { group: 'Leave', icon: Wallet, tone: 'amber' },
   OPTIONAL_HOLIDAY_CANCELLED: { group: 'Leave', icon: CalendarClock, tone: 'amber' },
 
   REGULARIZE_REQUESTED: { group: 'Attendance', icon: Clock, tone: 'violet' },
@@ -151,12 +153,27 @@ export function formatRelativeTime(input: string): string {
 }
 
 /** Day bucket used for the feed's section headers. */
-export function dayBucket(input: string): 'Today' | 'Yesterday' | 'Earlier' {
+/**
+ * Section heading for a notification, ported from the web panel's `bucketFor`
+ * so both products group the feed identically: recency buckets near the top,
+ * then month names once the rows are older than the current month.
+ */
+export function dayBucket(input: string): string {
   const date = new Date(input);
   if (Number.isNaN(date.getTime())) return 'Earlier';
-  const start = new Date();
-  start.setHours(0, 0, 0, 0);
-  if (date.getTime() >= start.getTime()) return 'Today';
-  if (date.getTime() >= start.getTime() - 86400000) return 'Yesterday';
-  return 'Earlier';
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  if (date.getTime() >= today.getTime()) return 'Today';
+  const yesterday = new Date(today);
+  yesterday.setDate(today.getDate() - 1);
+  if (date.getTime() >= yesterday.getTime()) return 'Yesterday';
+  const weekStart = new Date(today);
+  weekStart.setDate(today.getDate() - today.getDay());
+  if (date.getTime() >= weekStart.getTime()) return 'This week';
+  const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+  if (date.getTime() >= monthStart.getTime()) return 'Earlier this month';
+  return date.toLocaleDateString(undefined, {
+    month: 'long',
+    year: 'numeric',
+  });
 }

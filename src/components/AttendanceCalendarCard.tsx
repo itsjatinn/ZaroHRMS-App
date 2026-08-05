@@ -6,6 +6,7 @@ import Svg, { Circle } from 'react-native-svg';
 
 import {
   useAttendanceCalendar,
+  useMyMonthDays,
   type CalendarDayKind,
 } from '../api/attendance';
 import { useHolidayCalendar, useOptionalHolidayContext } from '../api/holidays';
@@ -70,6 +71,7 @@ type Status =
   | 'in-progress'
   | 'absent'
   | 'half'
+  | 'compoff-earned'
   | 'holiday'
   | 'applied'
   | 'approved'
@@ -122,6 +124,16 @@ const STATUS_STYLE: Record<
     halfFill: ['rgba(236, 72, 153, 0.45)', 'rgba(236, 72, 153, 0.14)'],
   },
   absent: { bg: 'rgba(220, 38, 38, 0.26)', text: '#B91C1C' },
+  /**
+   * Worked on a configured week off / holiday. Split fill — teal (the credit)
+   * over green (the day was worked) — so it can't be mistaken for Present's
+   * solid green or Comp Off's ringed teal. Matches the web widget.
+   */
+  'compoff-earned': {
+    bg: 'transparent',
+    text: '#0F766E',
+    halfFill: ['rgba(13, 148, 136, 0.38)', 'rgba(94, 155, 123, 0.30)'],
+  },
   holiday: { bg: 'rgba(224, 120, 86, 0.32)', text: '#B04A2A' },
   applied: { bg: 'rgba(124, 123, 216, 0.3)', text: '#5B5AB8' },
   approved: { bg: 'rgba(212, 162, 74, 0.34)', text: '#A37526' },
@@ -219,6 +231,14 @@ const ATTENDANCE_LEGEND: LegendItem[] = [
     color: 'transparent',
     halfFill: ['#EC4899', 'rgba(236, 72, 153, 0.28)'],
   },
+  // Split teal/green, mirroring the cell: worked the day (green) and it sits
+  // in comp-off territory (teal). Distinct from Present and from the ringed
+  // "Comp Off" leave dot.
+  {
+    label: 'Comp off earned',
+    color: 'transparent',
+    halfFill: ['#0F9488', '#5E9B7B'],
+  },
   // After the three core outcomes: regularization modifies a day rather than
   // being an outcome of its own. Order matches the web widget key for key.
   {
@@ -232,10 +252,10 @@ const ATTENDANCE_LEGEND: LegendItem[] = [
 
 const HOLIDAY_LEGEND: LegendItem = {
   label: 'Holiday',
+  // Plain, ring-free — the ring is what marks "Optional holiday claimed"
+  // beside it, and the day cells never draw a ring for a plain holiday.
+  // Matches the web widget's legend after the same fix.
   color: '#E07856',
-  // Faint ring, as on the web dot — it is what separates Holiday from the
-  // solid-ringed "Optional holiday claimed" sitting right beside it.
-  border: 'rgba(224, 120, 86, 0.4)',
 };
 
 const LEAVE_LEGEND: LegendItem[] = [
@@ -295,6 +315,29 @@ type AttendanceCalendarCardProps = {
 };
 
 /** Calendar kinds → the card's day statuses. Unknown kinds stay unmarked. */
+/** The web tooltip's vocabulary, for the tap-to-inspect strip below. */
+const STATUS_LABELS: Partial<Record<Status, string>> = {
+  present: 'Present',
+  'in-progress': 'Punched in — day in progress',
+  absent: 'Absent',
+  half: 'Half Day',
+  holiday: 'Holiday',
+  applied: 'Leave applied',
+  approved: 'Leave approved',
+  'work-applied': 'WFH / On Duty applied',
+  wfh: 'WFH / On Duty',
+  compoff: 'Comp Off',
+  lop: 'Loss of Pay',
+  'optional-claimed': 'Optional holiday claimed',
+  'optional-pending': 'Optional holiday pending',
+  'regularization-applied': 'Regularization applied',
+  'regularization-approved': 'Regularization approved',
+};
+
+/** Leave-family kinds — a work request on the same day gets the web's
+ *  dashed overlap ring instead of overwriting the leave fill. */
+const LEAVE_FAMILY: Status[] = ['applied', 'approved', 'lop', 'compoff'];
+
 function toDayStatus(kind: CalendarDayKind | undefined): Status | undefined {
   switch (kind) {
     case 'present':
@@ -382,6 +425,14 @@ export default function AttendanceCalendarCard({
   // overlaid with the month's leave/WFH/OD requests, comp-off and LOP flagged
   // apart, pending vs approved distinguished.
   const monthQuery = useAttendanceCalendar(
+    cursor.year,
+    cursor.month + 1,
+    isBackendSession,
+  );
+  // The per-day off-day context (worked on a configured week off / holiday,
+  // comp-off credited) only rides on me/month — the calendar feed doesn't
+  // carry it.
+  const myMonthQuery = useMyMonthDays(
     cursor.year,
     cursor.month + 1,
     isBackendSession,
@@ -480,6 +531,13 @@ export default function AttendanceCalendarCard({
       if (status) map[Number(dayKey)] = status;
     }
 
+    // Worked on a configured off day → the comp-off-earned pill, the same
+    // override the web widget applies: an auto-ABSENT on a week off reads
+    // as "didn't work", the opposite of what happened.
+    for (const row of myMonthQuery.data ?? []) {
+      if (row?.context) map[row.day] = 'compoff-earned';
+    }
+
     // Today's cell gets its ring only when nothing else already marks it.
     const today = new Date();
     if (
@@ -492,10 +550,102 @@ export default function AttendanceCalendarCard({
     return map;
   }, [
     monthQuery.data,
+    myMonthQuery.data,
     holidaysQuery.data,
     optionalClaimsQuery.data,
     cursor.year,
     cursor.month,
+  ]);
+
+  // Night-shift days get the web widget's "+1" corner marker: the shift ran
+  // past midnight, so the next morning's punch-out counts for this day.
+  const overnightDays = useMemo(
+    () =>
+      new Set(
+        (myMonthQuery.data ?? [])
+          .filter((row) => row?.overnight)
+          .map((row) => row.day),
+      ),
+    [myMonthQuery.data],
+  );
+
+  // Days where a leave fill and a WFH/OD request coexist — the web draws a
+  // dashed ring around the leave pill rather than letting one overwrite the
+  // other; same here.
+  const workRequestDays = useMemo(() => {
+    const days = new Set<number>();
+    for (const [dayKey, types] of Object.entries(
+      monthQuery.data?.workTypesByDay ?? {},
+    )) {
+      const day = Number(dayKey);
+      const status = dayStatuses[day];
+      if (
+        Array.isArray(types) &&
+        types.length > 0 &&
+        status &&
+        LEAVE_FAMILY.includes(status)
+      ) {
+        days.add(day);
+      }
+    }
+    return days;
+  }, [monthQuery.data, dayStatuses]);
+
+  // Tap-to-inspect: the mobile stand-in for the web tooltip. Tapping a
+  // statused day shows its full story (leave-type names, work requests,
+  // off-day context, night shift) in a strip under the grid.
+  const [infoDay, setInfoDay] = useState<number | null>(null);
+  const infoText = useMemo(() => {
+    if (infoDay == null) return null;
+    const status = isBackendSession
+      ? dayStatuses[infoDay]
+      : isDemoMonth
+        ? DEMO_STATUSES[infoDay]
+        : undefined;
+    const parts: string[] = [];
+    const row = (myMonthQuery.data ?? []).find((r) => r?.day === infoDay);
+    // Absent WITH a punch-in = forgot to punch out. The pill stays Absent
+    // (the day is still uncredited) but the strip says which, so the employee
+    // knows to regularize rather than dispute an absence they didn't take.
+    if (row?.missedPunch) {
+      parts.push('Absent — punch-out is missing. Regularize to correct this day.');
+    } else if (row?.late) {
+      // Still Present (and green) — this only says why.
+      parts.push('Late punch-in');
+    }
+    if (row?.context) {
+      const base = row.context === 'HOLIDAY' ? 'holiday' : 'week off';
+      parts.push(
+        row.compOff
+          ? `Worked on a ${base} — comp off credited`
+          : `Worked on a configured ${base}`,
+      );
+    }
+    const leaveNames = monthQuery.data?.leaveTypesByDay?.[infoDay] ?? [];
+    parts.push(...leaveNames);
+    const workTypes = (monthQuery.data?.workTypesByDay?.[infoDay] ?? []).map(
+      (type) => {
+        const label = type === 'WFH' ? 'Work from home' : 'On Duty';
+        return status === 'work-applied' ? `${label} (Applied)` : label;
+      },
+    );
+    parts.push(...workTypes);
+    if (parts.length === 0 && status && status !== 'today') {
+      const label = STATUS_LABELS[status];
+      if (label) parts.push(label);
+    }
+    if (overnightDays.has(infoDay)) {
+      parts.push('Night shift — ended next morning');
+    }
+    return parts.length > 0 ? parts.join(' · ') : null;
+  }, [
+    infoDay,
+    isBackendSession,
+    isDemoMonth,
+    dayStatuses,
+    monthQuery.data,
+    myMonthQuery.data,
+    overnightDays,
   ]);
 
   // Hand the resolved month up so the page's summary counts the same days the
@@ -541,9 +691,10 @@ export default function AttendanceCalendarCard({
   for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i + 7));
 
   // Any month change (arrows here, or the parent's filter when controlled)
-  // invalidates the selection.
+  // invalidates the selection and the day-info strip.
   useEffect(() => {
     setSelectedAbsent(null);
+    setInfoDay(null);
   }, [cursor.year, cursor.month]);
 
   const shiftMonth = (delta: number) => {
@@ -584,12 +735,20 @@ export default function AttendanceCalendarCard({
     return cellDate <= endOfToday;
   };
 
-  // Tap an actionable absent day to toggle its menu; any other day dismisses.
+  // Tap an actionable absent day to toggle its menu; tapping any other
+  // statused day toggles its info strip (the mobile stand-in for the web
+  // tooltip); anything else dismisses both.
   const handleDayPress = (day: number, status: Status | undefined) => {
     if (isActionableAbsence(day, status)) {
+      setInfoDay(null);
       setSelectedAbsent((current) => (current === day ? null : day));
+      return;
+    }
+    setSelectedAbsent(null);
+    if (status && status !== 'today') {
+      setInfoDay((current) => (current === day ? null : day));
     } else {
-      setSelectedAbsent(null);
+      setInfoDay(null);
     }
   };
 
@@ -758,6 +917,24 @@ export default function AttendanceCalendarCard({
                       {day}
                     </Text>
                   )}
+                  {/* Leave + WFH/OD on the same day: the web keeps the leave
+                      fill and adds a dashed work-request ring around it. */}
+                  {day != null && workRequestDays.has(day) ? (
+                    <View
+                      pointerEvents="none"
+                      className="absolute inset-0 items-center justify-center"
+                    >
+                      <DashedRing size={42} color="#7C7BD8" />
+                    </View>
+                  ) : null}
+                  {day != null && overnightDays.has(day) ? (
+                    <Text
+                      className="absolute right-0.5 top-0.5 text-[8px] font-bold text-slate-400"
+                      accessibilityLabel="Night shift, ended next morning"
+                    >
+                      +1
+                    </Text>
+                  ) : null}
                 </Pressable>
               );
             })}
@@ -824,6 +1001,20 @@ export default function AttendanceCalendarCard({
           </View>
         ) : null}
       </View>
+
+      {/* Tap-to-inspect strip — the mobile stand-in for the web tooltip.
+          Tapping the strip (or the day again) dismisses it. */}
+      {infoDay != null && infoText ? (
+        <Pressable
+          onPress={() => setInfoDay(null)}
+          className="mt-3 flex-row items-start gap-2 rounded-xl bg-slate-50 px-3 py-2"
+        >
+          <Text className="text-xs font-bold text-ink">
+            {infoDay} {label}
+          </Text>
+          <Text className="flex-1 text-xs text-slate-600">{infoText}</Text>
+        </Pressable>
+      ) : null}
 
       {isBackendSession && monthQuery.isError ? (
         <Text className="mt-3 text-center text-xs text-rose-500">

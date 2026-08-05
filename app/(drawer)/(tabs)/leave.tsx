@@ -1,5 +1,5 @@
 import { useRouter } from 'expo-router';
-import { ChevronLeft } from 'lucide-react-native';
+import { BookOpen, ChevronLeft } from 'lucide-react-native';
 import { useMemo, useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -9,6 +9,7 @@ import {
   useCancelMyRequest,
   useMyRequests,
 } from '../../../src/api/leave';
+import { useModuleGate } from '../../../src/api/modules';
 import { useAuth } from '../../../src/auth/AuthContext';
 import AppScrollView from '../../../src/components/AppScrollView';
 import FilterSheet, { FilterIconButton } from '../../../src/components/FilterSheet';
@@ -93,6 +94,7 @@ type Filter = (typeof FILTERS)[number];
 export default function LeaveOverviewScreen() {
   const router = useRouter();
   const { isBackendSession } = useAuth();
+  const gate = useModuleGate(isBackendSession);
   const [filter, setFilter] = useState<Filter>('All');
   const [filterOpen, setFilterOpen] = useState(false);
   const cancelRequest = useCancelMyRequest();
@@ -156,13 +158,25 @@ export default function LeaveOverviewScreen() {
     [requests],
   );
 
-  // Overview shows only the most recent few; the rest live on "View all".
+  /** Overview cap — the rest live behind "View all". */
+  const OVERVIEW_LIMIT = 5;
+
+  // The filter applies BEFORE the cap, so "Pending" shows the 5 most recent
+  // pending requests rather than the pending subset of the latest 5.
+  const matchedCount = useMemo(
+    () =>
+      (filter === 'All'
+        ? requests
+        : requests.filter((r) => r.status === filter)
+      ).length,
+    [filter, requests],
+  );
   const visible = useMemo(() => {
     const matched =
       filter === 'All'
         ? requests
         : requests.filter((r) => r.status === filter);
-    return matched.slice(0, 3);
+    return matched.slice(0, OVERVIEW_LIMIT);
   }, [filter, requests]);
 
   const goBack = () => {
@@ -185,15 +199,30 @@ export default function LeaveOverviewScreen() {
           >
             <ChevronLeft size={22} color="#14323F" />
           </Pressable>
-          <View className="flex-1">
+          <View className="min-w-0 flex-1">
             <Text
-              className="text-center text-[18px] font-bold leading-6 text-ink"
+              className="text-left text-[18px] font-bold leading-6 text-ink"
               numberOfLines={1}
             >
               My Leave
             </Text>
           </View>
-          <View className="h-11 w-11" />
+          {/* Balance ledger — the "why is my balance X?" trail. Same h-10
+              pill styling as the back button so the row reads as one bar.
+              Hidden when the tenant has no Leave module: the destination
+              would only be able to say the module is off. */}
+          {gate.leaveOn ? (
+          <Pressable
+            onPress={() => router.push('/balance-ledger')}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="Balance ledger"
+            className="h-10 flex-row items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 active:scale-95"
+          >
+            <BookOpen size={15} color="#14323F" />
+            <Text className="text-[13px] font-bold text-ink">Ledger</Text>
+          </Pressable>
+          ) : null}
         </View>
 
         {/* Horizontally-scrolling balance tiles */}
@@ -264,7 +293,13 @@ export default function LeaveOverviewScreen() {
           <View className="flex-row items-center gap-3">
             <FilterIconButton onPress={() => setFilterOpen(true)} />
             <Pressable hitSlop={8} onPress={() => router.push('/requests')}>
-              <Text className="text-sm font-bold text-ink">View all</Text>
+              {/* Names the remainder, so the cap is visible rather than
+                  silently hiding requests behind a generic link. */}
+              <Text className="text-sm font-bold text-ink">
+                {matchedCount > OVERVIEW_LIMIT
+                  ? `View all (${matchedCount})`
+                  : 'View all'}
+              </Text>
             </Pressable>
           </View>
         </View>

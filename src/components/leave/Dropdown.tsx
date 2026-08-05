@@ -20,6 +20,11 @@ type DropdownProps = {
   onSelect: (value: string) => void;
   error?: boolean;
   className?: string;
+  /**
+   * Shorter trigger (h-10 / rounded-xl) for header rows, where the dropdown
+   * sits beside a 40px back button and the default h-12 looks mismatched.
+   */
+  compact?: boolean;
   overlay?: boolean;
 };
 
@@ -48,6 +53,7 @@ export default function Dropdown({
   onSelect,
   error = false,
   className = '',
+  compact = false,
   overlay = true,
 }: DropdownProps) {
   const [open, setOpen] = useState(false);
@@ -192,7 +198,9 @@ export default function Dropdown({
       <View ref={triggerRef} collapsable={false}>
         <Pressable
           onPress={toggleMenu}
-          className={`h-12 flex-row items-center justify-between rounded-2xl border bg-white px-3.5 ${
+          className={`${
+            compact ? 'h-10 rounded-xl' : 'h-12 rounded-2xl'
+          } flex-row items-center justify-between border bg-white px-3.5 ${
             error ? 'border-red-400' : open ? 'border-slate-300' : 'border-slate-200'
           }`}
         >

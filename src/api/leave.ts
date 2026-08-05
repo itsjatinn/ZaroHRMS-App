@@ -31,6 +31,57 @@ export type ApiLeaveType = {
   maxConsecutiveDays?: number;
 };
 
+/**
+ * One movement on a leave balance — the same GET /requests/balances/ledger
+ * feed behind the web panel's "Balance ledger". `note` carries the reason:
+ * the day a comp-off was earned, or HR's remark on a manual adjustment.
+ */
+export type LedgerEntry = {
+  id: string;
+  leaveTypeName: string | null;
+  leaveTypeCode: string | null;
+  year: number;
+  /** Signed days: +credit / -debit. */
+  delta: number;
+  kind: string;
+  note: string | null;
+  createdAt: string;
+};
+
+/** Human labels per movement kind — copied from the web panel verbatim. */
+export const LEDGER_KIND_LABEL: Record<string, string> = {
+  ACCRUAL: 'Monthly accrual',
+  DEBIT: 'Leave taken',
+  CREDIT_BACK: 'Cancelled leave credited back',
+  OPENING: 'Opening balance',
+  CARRY_FORWARD: 'Carried forward',
+  LAPSE: 'Lapsed at year end',
+  COMPOFF_EARN: 'Comp-off earned',
+  COMPOFF_LAPSE: 'Comp-off expired',
+  ENCASHMENT: 'Encashed',
+  LOP_ADJUST: 'Payroll LOP adjustment',
+  ADJUSTMENT: 'HR adjustment',
+};
+
+export function ledgerKindLabel(kind: string): string {
+  return LEDGER_KIND_LABEL[kind] ?? kind;
+}
+
+/** The signed-in employee's balance ledger, newest first. */
+export function useLeaveLedger(enabled = true) {
+  return useQuery({
+    queryKey: ['leave', 'balance-ledger'] as const,
+    queryFn: async ({ signal }) => {
+      const rows = await api.get<LedgerEntry[]>('/requests/balances/ledger', {
+        signal,
+      });
+      return Array.isArray(rows) ? rows : [];
+    },
+    staleTime: 60_000,
+    enabled,
+  });
+}
+
 export type LeaveBalanceRow = {
   id: string;
   code: string;

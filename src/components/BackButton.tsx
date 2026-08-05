@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { useNavigation, usePathname, useRouter } from 'expo-router';
 import { ChevronLeft } from 'lucide-react-native';
 import { useEffect, useRef } from 'react';
@@ -15,6 +16,8 @@ type BackButtonProps = {
   subtitleNumberOfLines?: number;
   /** Route to land on when there is no history to pop. Defaults to home. */
   fallbackRoute?: string;
+  /** Control pinned to the right of the header row (filter, action, …). */
+  right?: ReactNode;
 };
 
 // A top-left back control + optional page title/subtitle (shown to the right of
@@ -24,6 +27,7 @@ export default function BackButton({
   subtitle,
   subtitleNumberOfLines = 1,
   fallbackRoute = HOME_ROUTE,
+  right,
 }: BackButtonProps) {
   const router = useRouter();
   const navigation = useNavigation();
@@ -82,7 +86,7 @@ export default function BackButton({
         <ChevronLeft size={22} color="#14323F" />
       </Pressable>
       {title ? (
-        <View className="h-10 flex-1 justify-center">
+        <View className="h-10 min-w-0 flex-1 justify-center">
           <Text
             className="text-left text-[18px] font-bold leading-6 text-ink"
             numberOfLines={1}
@@ -91,6 +95,7 @@ export default function BackButton({
           </Text>
         </View>
       ) : null}
+      {right ?? null}
     </View>
   );
 }
