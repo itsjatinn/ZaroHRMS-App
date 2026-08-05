@@ -9,7 +9,6 @@ import BackButton from '../../../src/components/BackButton';
 import AppScrollView from '../../../src/components/AppScrollView';
 import AttendanceCalendarCard from '../../../src/components/AttendanceCalendarCard';
 import AttendanceStatGrid from '../../../src/components/attendance/AttendanceStatGrid';
-import MonthFilter from '../../../src/components/attendance/MonthFilter';
 import {
   fromDayStatuses,
   getMonthData,
@@ -68,20 +67,10 @@ export default function Attendance() {
         contentContainerClassName="gap-5 px-4"
         contentContainerStyle={{ paddingTop: 8, paddingBottom: insets.bottom + 112 }}
       >
-        {/* Header row: back + title on the left, month filter on the right */}
-        <View className="-mx-4 min-h-[58px] flex-row items-center justify-between pr-4">
-          <View className="flex-1">
-            <BackButton
-              title="Attendance"
-            />
-          </View>
-          <View className="justify-center">
-            <MonthFilter
-              year={year}
-              month={month}
-              onChange={(y, m) => setMonth({ year: y, month: m })}
-            />
-          </View>
+        {/* Header row: back + title. The month is chosen on the calendar card
+            below, with the same arrows the home screen uses. */}
+        <View className="-mx-4 min-h-[58px] justify-center">
+          <BackButton title="Attendance" />
         </View>
 
         {/* Summary: 2×2 grid with a center % ring */}
@@ -91,13 +80,16 @@ export default function Attendance() {
           loading={isBackendSession && calendarLoading}
         />
 
-        {/* Monthly attendance calendar */}
+        {/* Monthly attendance calendar. Still controlled — the stat grid above
+            has to summarise the same month — but its own arrows drive the
+            change now, exactly as on the home screen. */}
         <AttendanceCalendarCard
           year={year}
           month={month}
           hideLeaveLegend
           onMonthStatuses={setDayStatuses}
           onMonthLoadingChange={setCalendarLoading}
+          onMonthChange={(y, m) => setMonth({ year: y, month: m })}
         />
       </AppScrollView>
     </SafeAreaView>

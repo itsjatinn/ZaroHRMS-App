@@ -1,7 +1,7 @@
 import Constants from 'expo-constants';
 import { Link, useLocalSearchParams } from 'expo-router';
 import { Check, Eye, EyeOff } from 'lucide-react-native';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 
 import { getTenantBrand, login, toAppRole } from '../../src/api/auth';
@@ -27,7 +27,7 @@ type Errors = { org?: string; email?: string; password?: string };
 type Step = 'email' | 'password';
 
 export default function SignInScreen() {
-  const { signIn, orgSlug, rememberedEmail } = useAuth();
+  const { signIn, orgSlug, rememberedEmail, isLoading } = useAuth();
 
   /**
    * `?org=<slug>` carries the tenant across the panel's mobile redirect. The
@@ -60,6 +60,32 @@ export default function SignInScreen() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
+  /**
+   * AuthContext reads the remembered org + email out of the keychain
+   * asynchronously, and this screen mounts before that finishes — RootNavigator
+   * renders the (auth) stack while `isLoading` is still true (it only gates the
+   * splash). So the useState initialisers above always saw null, and "Remember
+   * me" persisted the email but nothing ever put it back in the field.
+   *
+   * Fill them in once the restore lands, guarded so a value the user has
+   * already typed is never overwritten, and only once per mount.
+   */
+  const hydratedRef = useRef(false);
+  useEffect(() => {
+    if (isLoading || hydratedRef.current) return;
+    hydratedRef.current = true;
+    if (rememberedEmail && !email) setEmail(rememberedEmail);
+    // `?org=` still wins: it says where this user just came from.
+    if (!orgParam && orgSlug && !org) {
+      setOrg(orgSlug);
+      // Collapse to the tappable summary row, as it does after a manual entry.
+      setEditingOrg(false);
+    }
+    // `email` / `org` are read, not tracked: this runs once (hydratedRef) and
+    // must see what is typed at that moment, not re-fire when it changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLoading, rememberedEmail, orgSlug, orgParam]);
+
   const [errors, setErrors] = useState<Errors>({});
   const [formError, setFormError] = useState<string>();
   const [loading, setLoading] = useState(false);

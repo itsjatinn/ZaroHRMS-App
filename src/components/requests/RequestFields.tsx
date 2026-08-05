@@ -5,6 +5,8 @@ import { CalendarDays, Clock3 } from 'lucide-react-native';
 import { useState, type ReactNode } from 'react';
 import { Pressable, Text, View } from 'react-native';
 
+import CalendarDateSheet from '../calendar/CalendarDateSheet';
+import type { DayMarkerKind } from '../calendar/dayMarkers';
 import { cardShadow } from '../shadow';
 
 export function formatDate(value: Date) {
@@ -38,21 +40,22 @@ export function DateField({
   placeholder = 'Select date',
   error = false,
   minimumDate,
+  markers,
+  weekOffWeekdays,
+  legend,
   onChange,
 }: {
   value: Date | null;
   placeholder?: string;
   error?: boolean;
   minimumDate?: Date;
+  /** Days to call out in the picker, keyed `yyyy-mm-dd`. */
+  markers?: Map<string, DayMarkerKind>;
+  weekOffWeekdays?: number[];
+  legend?: DayMarkerKind[];
   onChange: (value: Date) => void;
 }) {
   const [open, setOpen] = useState(false);
-
-  const handleChange = (event: DateTimePickerEvent, date?: Date) => {
-    setOpen(false);
-    if (event.type === 'dismissed' || !date) return;
-    onChange(date);
-  };
 
   return (
     <>
@@ -67,14 +70,18 @@ export function DateField({
           {value ? formatDate(value) : placeholder}
         </Text>
       </Pressable>
-      {open ? (
-        <DateTimePicker
-          mode="date"
-          value={value ?? minimumDate ?? new Date()}
-          minimumDate={minimumDate}
-          onChange={handleChange}
-        />
-      ) : null}
+      {/* The shared month grid rather than the OS dialog, so every request
+          form picks dates against the same calendar the rest of the app draws. */}
+      <CalendarDateSheet
+        visible={open}
+        value={value}
+        minimumDate={minimumDate}
+        markers={markers}
+        weekOffWeekdays={weekOffWeekdays}
+        legend={legend}
+        onSelect={onChange}
+        onClose={() => setOpen(false)}
+      />
     </>
   );
 }

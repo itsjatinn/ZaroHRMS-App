@@ -13,6 +13,7 @@ import { useHolidayCalendar, useOptionalHolidayContext } from '../api/holidays';
 import { useRegularizationEnabled } from '../api/leave';
 import { useModuleGate } from '../api/modules';
 import { useAuth } from '../auth/AuthContext';
+import { buildMonthWeeks, shiftMonthCursor } from './calendar/MonthCalendar';
 import { cardShadow } from './shadow';
 
 const NAVY = '#14323F';
@@ -189,6 +190,42 @@ const STATUS_STYLE: Record<
   today: { bg: '#14323F', text: '#FFFFFF' },
 };
 
+/**
+ * What each colour means, in the legend's own words. Tapping a day shows this,
+ * so the grid can be read without opening the (collapsed) legend and matching
+ * hues by eye — which is impossible for the pairs that differ only by ring.
+ */
+const STATUS_LABEL: Record<Status, string> = {
+  present: 'Present',
+  'in-progress': 'In progress',
+  half: 'Half Day',
+  absent: 'Absent',
+  holiday: 'Holiday',
+  applied: 'Leave applied',
+  approved: 'Leave approved',
+  'work-applied': 'WFH / On Duty applied',
+  wfh: 'WFH / On Duty approved',
+  compoff: 'Comp Off',
+  'compoff-earned': 'Worked on off day (comp-off earned)',
+  lop: 'Loss of Pay',
+  'regularization-applied': 'Regularization applied',
+  'regularization-approved': 'Regularization approved',
+  'optional-claimed': 'Optional holiday claimed',
+  'optional-pending': 'Optional holiday pending',
+  today: 'Today',
+};
+
+/**
+ * Dot colour for the label pill. The cell fills are translucent by design, so
+ * the saturated `text` hue is what actually reads at dot size against white;
+ * half-day carries no fill at all and borrows its left half.
+ */
+function labelDotColor(status: Status): string {
+  const style = STATUS_STYLE[status];
+  if (style.halfFill) return style.halfFill[0];
+  return style.border ?? style.text;
+}
+
 // Demo statuses for June 2026 (month index 5) — one of each kind, so the
 // offline build shows the full vocabulary.
 const DEMO_STATUSES: Record<number, Status> = {
@@ -306,9 +343,17 @@ type AttendanceCalendarCardProps = {
   onMonthStatuses?: (statuses: Record<number, string>) => void;
   /** Reports whether this month is still resolving its first live payload. */
   onMonthLoadingChange?: (loading: boolean) => void;
-  /** When provided, the calendar is controlled by the parent (arrows hidden). */
+  /** When provided, the calendar is controlled by the parent. */
   year?: number;
   month?: number; // 0-11
+  /**
+   * Lets a controlled parent keep the card's own arrows. Without it a
+   * controlled card can only show a static label, since writing local state
+   * would be overridden by the parent's props on the next render. With it the
+   * arrows work exactly as they do uncontrolled, and the parent is told which
+   * month to move to.
+   */
+  onMonthChange?: (year: number, month: number) => void;
   /** Attendance-page mode: keep the day colours but drop the leave legend
    *  group, which that page doesn't need to teach. */
   hideLeaveLegend?: boolean;
@@ -377,6 +422,7 @@ export default function AttendanceCalendarCard({
   hideLeaveLegend = false,
   onMonthStatuses,
   onMonthLoadingChange,
+  onMonthChange,
 }: AttendanceCalendarCardProps) {
   const router = useRouter();
   const { isBackendSession } = useAuth();
@@ -408,13 +454,17 @@ export default function AttendanceCalendarCard({
   }, [isBackendSession]);
   const controlled = year != null && month != null;
   const cursor = controlled ? { year: year!, month: month! } : internal;
-  const setCursor = setInternal;
+  // Arrows show whenever the month can actually move: always when this card
+  // owns the month, and when a controlled parent opted in by passing a handler.
+  const canShiftMonth = !controlled || onMonthChange != null;
 
   // Legend starts collapsed — it is reference material, not something the
   // employee reads every visit, and it was the tallest part of the card.
   const [legendOpen, setLegendOpen] = useState(false);
-  // Absent day awaiting action; tapping it again (or any other day) dismisses.
-  const [selectedAbsent, setSelectedAbsent] = useState<number | null>(null);
+  // The tapped day. An actionable absence opens the Regularize / Apply-leave
+  // menu; any other marked day names its status instead. Tapping it again (or
+  // an unmarked day) dismisses.
+  const [selectedDay, setSelectedDay] = useState<number | null>(null);
   // Measured width of the day grid, needed to pixel-position the popover.
   const [gridWidth, setGridWidth] = useState(0);
 
@@ -675,36 +725,29 @@ export default function AttendanceCalendarCard({
   }, [gate.attendanceOn, gate.leaveOn, hideLeaveLegend, optionalAutoApprove]);
 
   const firstDay = new Date(cursor.year, cursor.month, 1).getDay();
-  const daysInMonth = new Date(cursor.year, cursor.month + 1, 0).getDate();
   const label = new Date(cursor.year, cursor.month, 1).toLocaleDateString(
     'en-US',
     { month: 'short', year: 'numeric' },
   );
 
-  // Build cells: leading blanks + days, chunked into weeks of 7.
-  const cells: (number | null)[] = [
-    ...Array(firstDay).fill(null),
-    ...Array.from({ length: daysInMonth }, (_, i) => i + 1),
-  ];
-  while (cells.length % 7 !== 0) cells.push(null);
-  const weeks: (number | null)[][] = [];
-  for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i + 7));
+  // `firstDay` stays a local: the absent-day popover positions itself from it,
+  // which the shared helper has no reason to know about.
+  const weeks = buildMonthWeeks(cursor.year, cursor.month);
 
   // Any month change (arrows here, or the parent's filter when controlled)
   // invalidates the selection and the day-info strip.
   useEffect(() => {
-    setSelectedAbsent(null);
+    setSelectedDay(null);
     setInfoDay(null);
   }, [cursor.year, cursor.month]);
 
   const shiftMonth = (delta: number) => {
-    setCursor((c) => {
-      const m = c.month + delta;
-      return {
-        year: c.year + Math.floor(m / 12),
-        month: ((m % 12) + 12) % 12,
-      };
-    });
+    const next = shiftMonthCursor(cursor, delta);
+    // Controlled: the parent owns the month (its summary has to count the same
+    // one), so hand the change up. Writing local state here would be silently
+    // discarded when the unchanged props re-render the card.
+    if (controlled) onMonthChange?.(next.year, next.month);
+    else setInternal(next);
   };
 
   /**
@@ -721,10 +764,20 @@ export default function AttendanceCalendarCard({
   };
 
   /**
+   * A day's status, from the live month or the offline demo set. Shared by the
+   * grid and the tap handler so the pill can never name a different status
+   * than the colour the employee actually tapped.
+   */
+  const statusForDay = (day: number): Status | undefined => {
+    if (isBackendSession) return dayStatuses[day];
+    return isDemoMonth ? DEMO_STATUSES[day] : undefined;
+  };
+
+  /**
    * An absent day is actionable when it isn't in the future — you can't
    * regularize or take leave for a day that hasn't happened — and at least one
    * resolution route is available. With neither, the menu would open empty, so
-   * the day stays an inert pill rather than a control that does nothing.
+   * the day falls back to naming its status like any other marked day.
    */
   const isActionableAbsence = (day: number, status: Status | undefined) => {
     if (status !== 'absent') return false;
@@ -735,30 +788,31 @@ export default function AttendanceCalendarCard({
     return cellDate <= endOfToday;
   };
 
-  // Tap an actionable absent day to toggle its menu; tapping any other
-  // statused day toggles its info strip (the mobile stand-in for the web
-  // tooltip); anything else dismisses both.
+  // Tap a marked day to toggle its popover — the action menu for an actionable
+  // absence, otherwise the status name — plus, for non-actionable days, the
+  // richer day-info strip below the grid (the mobile stand-in for the web
+  // tooltip). An unmarked day just dismisses whatever is open.
   const handleDayPress = (day: number, status: Status | undefined) => {
-    if (isActionableAbsence(day, status)) {
+    if (!status) {
+      setSelectedDay(null);
       setInfoDay(null);
-      setSelectedAbsent((current) => (current === day ? null : day));
       return;
     }
-    setSelectedAbsent(null);
-    if (status && status !== 'today') {
-      setInfoDay((current) => (current === day ? null : day));
-    } else {
+    if (isActionableAbsence(day, status) || status === 'today') {
       setInfoDay(null);
+    } else {
+      setInfoDay((current) => (current === day ? null : day));
     }
+    setSelectedDay((current) => (current === day ? null : day));
   };
 
   /** Hands the chosen flow the day, prefilled — the web does the same. */
   const openAbsenceAction = (view: 'regularize' | 'apply') => {
-    if (selectedAbsent == null) return;
+    if (selectedDay == null) return;
     const mm = String(cursor.month + 1).padStart(2, '0');
-    const dd = String(selectedAbsent).padStart(2, '0');
+    const dd = String(selectedDay).padStart(2, '0');
     const iso = `${cursor.year}-${mm}-${dd}`;
-    setSelectedAbsent(null);
+    setSelectedDay(null);
     router.push(
       view === 'regularize'
         ? `/regularize?date=${iso}`
@@ -766,17 +820,31 @@ export default function AttendanceCalendarCard({
     );
   };
 
+  const selectedStatus =
+    selectedDay != null ? statusForDay(selectedDay) : undefined;
+  // An actionable absence keeps its menu; every other marked day names itself.
+  const showActions =
+    selectedDay != null && isActionableAbsence(selectedDay, selectedStatus);
+  const infoLabel =
+    !showActions && selectedStatus ? STATUS_LABEL[selectedStatus] : null;
+
   // Popover geometry: anchored to the selected day's cell, clamped to the
   // grid, flipped above the day when it sits in the last row.
   const ROW_H = 48; // h-12 day rows
   const showRegularize =
-    canRegularize && selectedAbsent != null && !isTodayCell(selectedAbsent);
+    canRegularize && showActions && !isTodayCell(selectedDay!);
   const actionCount = (showRegularize ? 1 : 0) + (canApplyLeave ? 1 : 0);
-  const PILL_W = actionCount > 1 ? 196 : 118;
+  // The label pill is sized to its text — the names run from "Present" to
+  // "Regularization approved" — then clamped so it can never exceed the grid.
+  const PILL_W = showActions
+    ? actionCount > 1
+      ? 196
+      : 118
+    : Math.min(Math.round((infoLabel?.length ?? 0) * 6.4) + 46, gridWidth || 240);
   const PILL_H = 34;
   let pillStyle: { top: number; left: number } | null = null;
-  if (selectedAbsent != null && gridWidth > 0) {
-    const position = firstDay + selectedAbsent - 1;
+  if (selectedDay != null && (showActions || infoLabel) && gridWidth > 0) {
+    const position = firstDay + selectedDay - 1;
     const row = Math.floor(position / 7);
     const col = position % 7;
     const cellW = gridWidth / 7;
@@ -803,7 +871,7 @@ export default function AttendanceCalendarCard({
     >
       <View className="flex-row items-center justify-between">
         <Text className="text-base font-bold text-ink">Attendance</Text>
-        {controlled ? (
+        {!canShiftMonth ? (
           <Text className="text-base font-bold text-ink">{label}</Text>
         ) : (
           <View className="flex-row items-center gap-3">
@@ -842,15 +910,9 @@ export default function AttendanceCalendarCard({
         {weeks.map((week, wi) => (
           <View key={wi} className="flex-row">
             {week.map((day, di) => {
-              const status = day
-                ? isBackendSession
-                  ? dayStatuses[day]
-                  : isDemoMonth
-                    ? DEMO_STATUSES[day]
-                    : undefined
-                : undefined;
+              const status = day == null ? undefined : statusForDay(day);
               const isWeekend = di === 0 || di === 6;
-              const selected = day != null && day === selectedAbsent;
+              const selected = day != null && day === selectedDay;
               const style = status ? STATUS_STYLE[status] : null;
               return (
                 <Pressable
@@ -941,8 +1003,9 @@ export default function AttendanceCalendarCard({
           </View>
         ))}
 
-        {/* Absent-day menu: Regularize and/or Apply leave, whichever the
-            org licenses — anchored to the selected day. */}
+        {/* Anchored to the selected day: the status name, or — for an absence
+            the employee can still resolve — Regularize and/or Apply leave,
+            whichever the org licenses. */}
         {pillStyle ? (
           <View
             style={{
@@ -957,8 +1020,28 @@ export default function AttendanceCalendarCard({
               shadowRadius: 8,
               ...pillStyle,
             }}
-            className="flex-row overflow-hidden rounded-xl bg-ink"
+            // The label pill is white so the status dot keeps its own hue; the
+            // action menu stays ink, which reads as a control rather than a
+            // caption.
+            className={`flex-row overflow-hidden rounded-xl ${
+              showActions ? 'bg-ink' : 'border border-slate-200 bg-white'
+            }`}
           >
+            {infoLabel && selectedStatus ? (
+              <View className="h-full flex-1 flex-row items-center justify-center gap-1.5 px-2">
+                <View
+                  className="h-2.5 w-2.5 rounded-full"
+                  style={{ backgroundColor: labelDotColor(selectedStatus) }}
+                />
+                <Text
+                  numberOfLines={1}
+                  className="text-xs font-bold text-ink"
+                >
+                  {infoLabel}
+                </Text>
+              </View>
+            ) : null}
+
             {showRegularize ? (
               <Pressable
                 onPress={() => openAbsenceAction('regularize')}
@@ -974,7 +1057,7 @@ export default function AttendanceCalendarCard({
               <View className="my-2 w-px bg-white/25" />
             ) : null}
 
-            {canApplyLeave ? (
+            {showActions && canApplyLeave ? (
               <Pressable
                 onPress={() => openAbsenceAction('apply')}
                 accessibilityRole="button"

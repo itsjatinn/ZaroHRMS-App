@@ -134,20 +134,35 @@ function RootNavigator({ fontsReady }: { fontsReady: boolean }) {
 
   return (
     <View style={{ flex: 1 }} onLayout={handleFirstLayout}>
-      <Stack
-        screenOptions={{
-          headerShown: false,
-          animation: 'fade',
-          animationDuration: 250,
-        }}
-      >
-        <Stack.Protected guard={isAuthenticated}>
-          <Stack.Screen name="(drawer)" />
-        </Stack.Protected>
-        <Stack.Protected guard={!isAuthenticated}>
-          <Stack.Screen name="(auth)" />
-        </Stack.Protected>
-      </Stack>
+      {/*
+        Nothing is rendered until the session has been read back from storage.
+        The guards below are evaluated the moment they mount, and `session`
+        starts as null — so while `isLoading` was still true the router saw
+        "not authenticated", mounted the auth group and committed a navigation
+        to /sign-in. On native the splash hid it; on web a reload with a
+        perfectly valid stored session landed the employee on sign-in, because
+        by the time the session resolved the redirect had already happened.
+
+        Gated on `isLoading` alone, not `appReady`: the session read is the
+        only thing the guards depend on. Waiting on `fontsReady` too would hold
+        the whole UI back for a font fetch this bug has nothing to do with.
+      */}
+      {!isLoading ? (
+        <Stack
+          screenOptions={{
+            headerShown: false,
+            animation: 'fade',
+            animationDuration: 250,
+          }}
+        >
+          <Stack.Protected guard={isAuthenticated}>
+            <Stack.Screen name="(drawer)" />
+          </Stack.Protected>
+          <Stack.Protected guard={!isAuthenticated}>
+            <Stack.Screen name="(auth)" />
+          </Stack.Protected>
+        </Stack>
+      ) : null}
     </View>
   );
 }

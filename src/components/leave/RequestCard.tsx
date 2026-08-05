@@ -1,8 +1,19 @@
 import type { LucideIcon } from 'lucide-react-native';
-import { ChevronDown, ChevronUp, X } from 'lucide-react-native';
+import { ChevronDown, ChevronUp, Paperclip, X } from 'lucide-react-native';
 import { useState } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { ActivityIndicator, Platform, Pressable, Text, View } from 'react-native';
 
+import type { RequestAttachment } from '../../api/leave';
+import {
+  fetchRequestAttachment,
+  openAttachmentExternally,
+} from '../../api/requestAttachments';
+import { Alert } from '../CrossAlert';
+import DocumentPreview, {
+  isImage,
+  isPdf,
+  type PreviewTarget,
+} from '../profile/DocumentPreview';
 import { cardShadow } from '../shadow';
 
 /**
@@ -34,6 +45,13 @@ type RequestCardProps = {
   appliedOn?: string;
   /** When it was approved or rejected; absent while pending. */
   actionDate?: string;
+  /**
+   * Proof files uploaded with the request. Needs `requestId` too — the
+   * download endpoint addresses them as /requests/:id/attachments/:index, so
+   * the position in this array IS the identifier.
+   */
+  attachments?: RequestAttachment[];
+  requestId?: string;
 };
 
 // Per-status treatment for the status pill — soft 50-tints so a mixed list
@@ -90,8 +108,53 @@ export default function RequestCard({
   reason,
   appliedOn,
   actionDate,
+  attachments,
+  requestId,
 }: RequestCardProps) {
   const [reasonOpen, setReasonOpen] = useState(false);
+  /** Index of the attachment currently downloading, so only its button spins. */
+  const [openingIndex, setOpeningIndex] = useState<number | null>(null);
+  /** The file being shown in the in-app preview card, once it is on disk. */
+  const [preview, setPreview] = useState<PreviewTarget | null>(null);
+
+  // Without an id there is nothing to fetch, so the buttons render inert
+  // rather than failing. That is the demo session, whose sample requests
+  // carry no stored files.
+  const canOpenAttachments = Boolean(requestId);
+
+  const closePreview = () => {
+    // A blob URL pins the whole file in memory for the life of the tab.
+    if (preview?.uri.startsWith('blob:')) URL.revokeObjectURL(preview.uri);
+    setPreview(null);
+  };
+
+  const openAttachment = async (index: number, name: string) => {
+    if (!requestId || openingIndex !== null) return;
+    setOpeningIndex(index);
+    try {
+      const file = await fetchRequestAttachment({ requestId, index, name });
+
+      // Images and PDFs render in the card. DOC/DOCX have no renderer, and
+      // Android's WebView draws an empty frame for a PDF rather than failing,
+      // so both go to the device's own viewer instead of an empty card.
+      const previewable =
+        isImage(file.mimeType) ||
+        (isPdf(file.mimeType) && Platform.OS !== 'android');
+
+      if (previewable) {
+        setPreview({ name, uri: file.uri, mimeType: file.mimeType });
+      } else {
+        await openAttachmentExternally(file, name);
+      }
+    } catch {
+      Alert.alert(
+        "Couldn't open the attachment",
+        'Please check your connection and try again.',
+      );
+    } finally {
+      setOpeningIndex(null);
+    }
+  };
   const s = STATUS_STYLES[status];
   const rejected = status === 'Rejected';
   const cancellable = !rejected && onCancel;
@@ -129,7 +192,7 @@ export default function RequestCard({
         </View>
       </View>
 
-      {reason || appliedOn || actionDate ? (
+      {reason || appliedOn || actionDate || attachments?.length ? (
         <>
           <View className="mt-3 border-t border-slate-100" />
           <View className="mt-3 gap-2">
@@ -143,8 +206,12 @@ export default function RequestCard({
                 </Text>
               </View>
             ) : null}
-            {appliedOn || actionDate ? (
-              <View className="flex-row gap-3">
+            {appliedOn || actionDate || attachments?.length ? (
+              // Wraps rather than squashing: with a decision date present this
+              // row already carries Applied + Actioned, and Attached is a
+              // third item that would otherwise crush the dates on a narrow
+              // phone.
+              <View className="flex-row flex-wrap items-center gap-x-3 gap-y-2">
                 {appliedOn ? (
                   <View className="flex-1 flex-row gap-2">
                     <Text className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
@@ -165,6 +232,50 @@ export default function RequestCard({
                     <Text className="text-xs font-medium text-ink">
                       {actionDate}
                     </Text>
+                  </View>
+                ) : null}
+                {/* Sits to the right of Applied, on the same line. Shown for
+                    every status, not just approved: the employee needs to
+                    check what they sent while it is still pending, and to
+                    re-read it after a rejection. */}
+                {attachments?.length ? (
+                  <View className="shrink-0 flex-row items-center gap-2">
+                    <Text className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                      Attachment
+                    </Text>
+                    {attachments.map((file, index) => {
+                      const busy = openingIndex === index;
+                      return (
+                        <Pressable
+                          // Name alone is not unique — the same file can be
+                          // attached twice — and the list never reorders, so
+                          // the index is stable.
+                          key={`${index}-${file.name}`}
+                          disabled={!canOpenAttachments || openingIndex !== null}
+                          onPress={() => openAttachment(index, file.name)}
+                          hitSlop={6}
+                          accessibilityRole={canOpenAttachments ? 'button' : 'text'}
+                          accessibilityLabel={
+                            canOpenAttachments ? `View ${file.name}` : file.name
+                          }
+                          className={`flex-row items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 ${
+                            canOpenAttachments ? 'active:opacity-70' : ''
+                          }`}
+                        >
+                          <Paperclip size={12} color="#64748B" strokeWidth={2} />
+                          {busy ? (
+                            <ActivityIndicator size="small" color="#14323F" />
+                          ) : (
+                            <Text className="text-[11px] font-bold text-ink">
+                              {/* Numbered only when there is more than one, so
+                                  the buttons stay tellable apart. */}
+                              {canOpenAttachments ? 'View' : 'File'}
+                              {attachments.length > 1 ? ` ${index + 1}` : ''}
+                            </Text>
+                          )}
+                        </Pressable>
+                      );
+                    })}
                   </View>
                 ) : null}
               </View>
@@ -217,6 +328,11 @@ export default function RequestCard({
           ) : null}
         </>
       ) : null}
+
+      {/* In-app viewer: a centred card over the list, not a new tab or the
+          share sheet. Mounted only once a file has actually been fetched, so
+          an untouched card costs nothing. */}
+      <DocumentPreview target={preview} onClose={closePreview} />
     </View>
   );
 }

@@ -10,17 +10,19 @@ import {
   Text,
   TextInput,
   View,
-  findNodeHandle,
   useWindowDimensions,
 } from 'react-native';
+import { focusTargetHandle } from '../../src/components/nodeHandle';
 import { Alert } from '../../src/components/CrossAlert';
 import {
   SafeAreaView,
   useSafeAreaInsets,
 } from 'react-native-safe-area-context';
 
+import { useHolidayCalendar } from '../../src/api/holidays';
 import {
   isWorkAttachmentRequired,
+  useLeavePolicySettings,
   useWorkRequestPolicy,
 } from '../../src/api/leave';
 import {
@@ -36,6 +38,10 @@ import RequestSuccessModal, {
 import { useAuth } from '../../src/auth/AuthContext';
 import AppScrollView from '../../src/components/AppScrollView';
 import BackButton from '../../src/components/BackButton';
+import {
+  WORK_REQUEST_DAY_MARKERS,
+  type DayMarkerKind,
+} from '../../src/components/calendar/dayMarkers';
 import BalanceTile from '../../src/components/leave/BalanceTile';
 import Dropdown from '../../src/components/leave/Dropdown';
 import AttachmentField from '../../src/components/requests/AttachmentField';
@@ -118,6 +124,8 @@ export default function WorkFromHome() {
     name: string;
     uri: string;
     mimeType?: string | null;
+    /** Set on web only; the upload needs the real File there. */
+    file?: File | null;
   } | null>(null);
   const [success, setSuccess] = useState<SuccessDetail[] | null>(null);
   // Covers the attachment upload as well as the POST.
@@ -139,6 +147,33 @@ export default function WorkFromHome() {
   // date matters because limits resolve against the period it falls in.
   const wfhAllowance = useWorkRequestAllowance('WFH', fromDate, isBackendSession);
   const odAllowance = useWorkRequestAllowance('OD', fromDate, isBackendSession);
+
+  /**
+   * Non-working days, shown on the date pickers. A WFH or On Duty request over
+   * a holiday or a week off is wasted — there is no working day to relocate.
+   *
+   * Both feeds are already cached by the leave screens, so this costs no extra
+   * round trip in practice. The holiday calendar is per year, which is why the
+   * picker can page months without going blank.
+   */
+  const leaveSettings = useLeavePolicySettings(isBackendSession);
+  const holidays = useHolidayCalendar(
+    (fromDate ?? new Date()).getFullYear(),
+    isBackendSession,
+  );
+  const dayMarkers = useMemo(() => {
+    const map = new Map<string, DayMarkerKind>();
+    for (const holiday of holidays.data?.holidays ?? []) {
+      const iso = String(holiday.isoDate || holiday.date || '').slice(0, 10);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) continue;
+      const optional =
+        holiday.isOptional ||
+        String(holiday.holidayType || holiday.type || '').toLowerCase() ===
+          'optional';
+      map.set(iso, optional ? 'optional-holiday' : 'holiday');
+    }
+    return map;
+  }, [holidays.data]);
 
   const allowanceTiles = [
     {
@@ -191,7 +226,7 @@ export default function WorkFromHome() {
   );
 
   const handleReasonFocus = () => {
-    const target = findNodeHandle(reasonRef.current);
+    const target = focusTargetHandle(reasonRef.current);
     reasonTargetRef.current = target;
     scrollReasonToKeyboard(target);
   };
@@ -209,6 +244,7 @@ export default function WorkFromHome() {
           name: asset.name,
           uri: asset.uri,
           mimeType: asset.mimeType,
+          file: asset.file,
         });
       }
     } catch {
@@ -424,6 +460,9 @@ export default function WorkFromHome() {
                   value={fromDate}
                   placeholder="dd/mm/yyyy"
                   error={attempted && !fromDate}
+                  markers={dayMarkers}
+                  weekOffWeekdays={leaveSettings.calendar.weekOffDays}
+                  legend={WORK_REQUEST_DAY_MARKERS}
                   onChange={(date) => {
                     setFromDate(date);
                     if (toDate && date > toDate) setToDate(date);
@@ -449,6 +488,9 @@ export default function WorkFromHome() {
                   placeholder="dd/mm/yyyy"
                   minimumDate={fromDate ?? undefined}
                   error={attempted && !toDate}
+                  markers={dayMarkers}
+                  weekOffWeekdays={leaveSettings.calendar.weekOffDays}
+                  legend={WORK_REQUEST_DAY_MARKERS}
                   onChange={setToDate}
                 />
               </View>

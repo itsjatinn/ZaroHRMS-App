@@ -91,11 +91,15 @@ const FILTERS = [
 ] as const;
 type Filter = (typeof FILTERS)[number];
 
+/** Sentinel for "no leave-type filter" — tenant types are arbitrary strings. */
+const ANY_TYPE = 'All';
+
 export default function LeaveOverviewScreen() {
   const router = useRouter();
   const { isBackendSession } = useAuth();
   const gate = useModuleGate(isBackendSession);
   const [filter, setFilter] = useState<Filter>('All');
+  const [typeFilter, setTypeFilter] = useState<string>(ANY_TYPE);
   const [filterOpen, setFilterOpen] = useState(false);
   const cancelRequest = useCancelMyRequest();
   const [cancelTarget, setCancelTarget] = useState<Request | null>(null);
@@ -161,23 +165,42 @@ export default function LeaveOverviewScreen() {
   /** Overview cap — the rest live behind "View all". */
   const OVERVIEW_LIMIT = 5;
 
-  // The filter applies BEFORE the cap, so "Pending" shows the 5 most recent
+  /**
+   * Leave types are tenant-defined, so the options are whatever the feed
+   * actually contains rather than a hardcoded list — a fixed list would either
+   * miss a tenant's custom type or offer ones the employee has never used.
+   * Counts come from the whole feed, like the status counts above, so they
+   * don't shift as the other filter changes.
+   */
+  const leaveTypes = useMemo(() => {
+    const counted = new Map<string, number>();
+    for (const request of requests) {
+      const label = request.type?.trim();
+      if (!label) continue;
+      counted.set(label, (counted.get(label) ?? 0) + 1);
+    }
+    return [...counted.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+  }, [requests]);
+
+  // A selected type can vanish when the feed refetches. Left alone the list
+  // would sit empty against a filter no longer offered, so fall back to All.
+  const typeStillOffered =
+    typeFilter === ANY_TYPE || leaveTypes.some(([label]) => label === typeFilter);
+  const activeType = typeStillOffered ? typeFilter : ANY_TYPE;
+
+  // Both filters apply BEFORE the cap, so "Pending" shows the 5 most recent
   // pending requests rather than the pending subset of the latest 5.
-  const matchedCount = useMemo(
+  const matched = useMemo(
     () =>
-      (filter === 'All'
-        ? requests
-        : requests.filter((r) => r.status === filter)
-      ).length,
-    [filter, requests],
+      requests.filter(
+        (r) =>
+          (filter === 'All' || r.status === filter) &&
+          (activeType === ANY_TYPE || r.type === activeType),
+      ),
+    [filter, activeType, requests],
   );
-  const visible = useMemo(() => {
-    const matched =
-      filter === 'All'
-        ? requests
-        : requests.filter((r) => r.status === filter);
-    return matched.slice(0, OVERVIEW_LIMIT);
-  }, [filter, requests]);
+  const matchedCount = matched.length;
+  const visible = useMemo(() => matched.slice(0, OVERVIEW_LIMIT), [matched]);
 
   const goBack = () => {
     if (router.canGoBack()) router.back();
@@ -304,6 +327,31 @@ export default function LeaveOverviewScreen() {
           </View>
         </View>
 
+        {/* Which filters are on. Without this a type filter is invisible —
+            the icon button looks identical either way — so a short list reads
+            as "you have no leave" rather than "you filtered it out". */}
+        {filter !== 'All' || activeType !== ANY_TYPE ? (
+          <View className="flex-row items-center gap-3 px-4">
+            <Text numberOfLines={1} className="flex-1 text-xs text-slate-500">
+              {[
+                filter === 'All' ? null : filter,
+                activeType === ANY_TYPE ? null : activeType,
+              ]
+                .filter(Boolean)
+                .join('  ·  ')}
+            </Text>
+            <Pressable
+              hitSlop={8}
+              onPress={() => {
+                setFilter('All');
+                setTypeFilter(ANY_TYPE);
+              }}
+            >
+              <Text className="text-xs font-bold text-ink">Clear</Text>
+            </Pressable>
+          </View>
+        ) : null}
+
         {/* Request list */}
         <View className="gap-4 px-4 pt-4">
           {isBackendSession && requestsQuery.isPending ? (
@@ -321,6 +369,8 @@ export default function LeaveOverviewScreen() {
               status={r.status}
               icon={r.icon}
               rejectionReason={r.rejectionReason}
+              attachments={r.attachments}
+              requestId={isBackendSession ? r.id : undefined}
               // Same statuses the view-all page allows withdrawing.
               onCancel={
                 r.status === 'Pending' || r.status === 'Approved'
@@ -341,16 +391,38 @@ export default function LeaveOverviewScreen() {
           cancelRequest.mutate({ id: request.id, reason });
         }}
       />
+      {/* Two sections, so status and leave type can be set in one visit — with
+          `sections` the sheet stays open until dismissed instead of closing on
+          the first tap. */}
       <FilterSheet
         visible={filterOpen}
         title="Leave requests"
         value={filter}
-        options={FILTERS.map((f) => ({
-          value: f,
-          label: f,
-          count: f === 'All' ? null : counts[f],
-        }))}
-        onChange={setFilter}
+        sections={[
+          {
+            title: 'Status',
+            value: filter,
+            options: FILTERS.map((f) => ({
+              value: f,
+              label: f,
+              count: f === 'All' ? null : counts[f],
+            })),
+            onChange: (next) => setFilter(next as Filter),
+          },
+          {
+            title: 'Leave type',
+            value: activeType,
+            options: [
+              { value: ANY_TYPE, label: 'All', count: null },
+              ...leaveTypes.map(([label, count]) => ({
+                value: label,
+                label,
+                count,
+              })),
+            ],
+            onChange: setTypeFilter,
+          },
+        ]}
         onClose={() => setFilterOpen(false)}
       />
     </SafeAreaView>

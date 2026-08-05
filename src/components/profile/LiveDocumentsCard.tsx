@@ -306,6 +306,8 @@ export default function LiveDocumentsCard() {
         uri: asset.uri,
         name: asset.name ?? 'document',
         mimeType: asset.mimeType,
+        // Web hands back a real File; the multipart body needs it there.
+        file: asset.file,
         category: doc.category,
         // Both matter: the slot key files it against this row, and reusing the
         // existing type makes a replace supersede the old file.

@@ -43,23 +43,31 @@ function StatTile({
   color: string;
   background: string;
 }) {
+  // Three to a row: the icon spans both lines with the label above the value
+  // beside it. `min-w-0` on the text column matters at a third of the screen —
+  // without it a long label pushes the value out of the tile instead of
+  // clipping to its own line.
   return (
-    <View className="w-[48.5%] rounded-xl border border-slate-200 bg-white p-2.5" style={cardShadow}>
-      <View className="flex-row items-center">
-        <View
-          className="mr-2 h-7 w-7 items-center justify-center rounded-lg"
-          style={{ backgroundColor: background }}
+    <View
+      className="flex-1 flex-row items-center gap-2 rounded-xl border border-slate-200 bg-white px-2 py-2.5"
+      style={cardShadow}
+    >
+      <View
+        className="h-8 w-8 shrink-0 items-center justify-center rounded-lg"
+        style={{ backgroundColor: background }}
+      >
+        <Feather name={icon} size={15} color={color} />
+      </View>
+      <View className="min-w-0 flex-1">
+        <Text
+          className="text-[8px] font-semibold uppercase tracking-wider text-slate-400"
+          numberOfLines={1}
         >
-          <Feather name={icon} size={15} color={color} />
-        </View>
-        <View className="flex-1">
-          <Text className="text-[8px] font-semibold uppercase tracking-wider text-slate-400">
-            {label}
-          </Text>
-          <Text className="text-lg font-bold leading-5" style={{ color }}>
-            {value}
-          </Text>
-        </View>
+          {label}
+        </Text>
+        <Text className="text-2xl font-bold leading-7" style={{ color }}>
+          {value}
+        </Text>
       </View>
     </View>
   );
@@ -196,7 +204,7 @@ export default function AttendanceCalendar({
         <MonthNav label={grid.label} onPrev={() => shiftMonth(-1)} onNext={() => shiftMonth(1)} />
       </View>
 
-      <View className="flex-row flex-wrap justify-between gap-y-2">
+      <View className="flex-row gap-2">
         <StatTile icon="calendar" label="Team attendance" value={`${totals.percent}%`} color="#2970A8" background="#E9F3FA" />
         <StatTile icon="user-check" label="Present days" value={`${totals.present}`} color="#347553" background="#E7F4EC" />
         <StatTile icon="user-x" label="Absent days" value={`${totals.absent}`} color="#B54246" background="#FDEBEC" />
