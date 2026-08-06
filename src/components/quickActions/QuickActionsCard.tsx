@@ -9,12 +9,13 @@ import {
 // Namespace import so an icon picked BY NAME in the web editor's library
 // resolves here too — lucide-react-native has no `icons` map export.
 import * as lucideAll from 'lucide-react-native';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import * as WebBrowser from 'expo-web-browser';
 import {
   ActivityIndicator,
   Image,
   Linking,
+  Platform,
   Pressable,
   Text,
   View,
@@ -28,6 +29,7 @@ import {
 import {
   launchSatellite,
   useAvailableSatellites,
+  warmSatellites,
   type SatelliteKey,
 } from '../../api/services';
 import { useAuth } from '../../auth/AuthContext';
@@ -117,6 +119,44 @@ function orgLinkChip(link: OrgQuickLink) {
   };
 }
 
+/**
+ * Web only: paints a lightweight "Opening…" note into a just-claimed blank
+ * tab. The tab must be opened synchronously inside the tap (popup blockers
+ * kill a window.open issued after an await), which means it exists before
+ * the signed URL does — without this the employee stares at about:blank for
+ * the whole mint + SSO handshake. Same-origin, so writing is permitted; the
+ * navigation that follows replaces it wholesale. Mirrors the web panel's
+ * satelliteLaunch.ts interstitial.
+ */
+function paintOpeningNote(tab: Window, label: string) {
+  try {
+    const doc = tab.document;
+    doc.title = `Opening ${label}…`;
+    doc.body.style.cssText =
+      'margin:0;display:grid;place-items:center;height:100vh;' +
+      'font-family:system-ui,-apple-system,sans-serif;background:#F7F6FC;color:#14323F';
+    const style = doc.createElement('style');
+    style.textContent = '@keyframes sat-spin{to{transform:rotate(360deg)}}';
+    doc.head.appendChild(style);
+    const wrap = doc.createElement('div');
+    wrap.style.textAlign = 'center';
+    const spinner = doc.createElement('div');
+    spinner.style.cssText =
+      'margin:0 auto 14px;width:28px;height:28px;border-radius:50%;' +
+      'border:3px solid rgba(20,50,63,.15);border-top-color:#14323F;' +
+      'animation:sat-spin .7s linear infinite';
+    const heading = doc.createElement('strong');
+    heading.textContent = `Opening ${label}…`;
+    const sub = doc.createElement('div');
+    sub.style.cssText = 'margin-top:6px;font-size:13px;color:#64748B';
+    sub.textContent = 'Signing you in — no password needed.';
+    wrap.append(spinner, heading, sub);
+    doc.body.appendChild(wrap);
+  } catch {
+    // Writing restrictions — the blank tab still works.
+  }
+}
+
 /** Home "Quick Links" card — the connected-service tiles plus the
  *  org-published and personal links from the web panel's Quick Links. */
 export default function QuickActionsCard() {
@@ -127,6 +167,13 @@ export default function QuickActionsCard() {
   // Gated on a real session: the demo session carries no bearer token, and an
   // unrecoverable 401 makes the API client sign the user out.
   const available = useAvailableSatellites(isBackendSession);
+
+  // Ping the satellites while the tiles are merely on screen, so a cold
+  // instance is already up by the time the employee taps one — the cold
+  // start was most of the seconds a launch used to spend on a blank page.
+  useEffect(() => {
+    warmSatellites(available.data);
+  }, [available.data]);
 
   const launchable = useMemo(
     () => new Set((available.data ?? []).map((row) => row.moduleKey)),
@@ -183,21 +230,40 @@ export default function QuickActionsCard() {
     }
 
     setLaunching(key);
+
+    // Web: claim the tab NOW, synchronously inside the tap — a window.open
+    // issued after the mint's await is what popup blockers kill, and the
+    // claimed tab gets an "Opening…" note instead of bare about:blank.
+    const label = TILES.find((tile) => tile.key === key)?.label ?? 'the portal';
+    const claimedTab =
+      Platform.OS === 'web' && typeof window !== 'undefined'
+        ? window.open('', '_blank')
+        : null;
+    if (claimedTab) paintOpeningNote(claimedTab, label);
+
     try {
       // Minted once: each call issues a fresh short-lived signed URL, so the
       // fallback below must reuse this one rather than ask for another.
       const url = await launchSatellite(key);
-      try {
-        // An in-app browser tab keeps the employee in the app and handles the
-        // signed URL reliably.
-        await WebBrowser.openBrowserAsync(url, {
-          presentationStyle: WebBrowser.WebBrowserPresentationStyle.FULL_SCREEN,
-        });
-      } catch {
-        // Some devices have no in-app browser; hand the same URL to the OS.
-        await Linking.openURL(url);
+      if (claimedTab) {
+        // Sever the opener link so the satellite page cannot reach back in.
+        claimedTab.opener = null;
+        claimedTab.location.href = url;
+      } else {
+        try {
+          // An in-app browser tab keeps the employee in the app and handles
+          // the signed URL reliably.
+          await WebBrowser.openBrowserAsync(url, {
+            presentationStyle:
+              WebBrowser.WebBrowserPresentationStyle.FULL_SCREEN,
+          });
+        } catch {
+          // Some devices have no in-app browser; hand the same URL to the OS.
+          await Linking.openURL(url);
+        }
       }
     } catch (err) {
+      claimedTab?.close();
       // The backend distinguishes "not licensed" (403) from "licensed but never
       // connected" (409); both are actionable by an admin, so pass its wording
       // through rather than flattening it.

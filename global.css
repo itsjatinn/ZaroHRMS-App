@@ -14,3 +14,44 @@ body,
 body {
   margin: 0;
 }
+
+/*
+ * Autofill.
+ *
+ * Chrome and Safari paint their own tint onto an autofilled input through the
+ * UA stylesheet, with !important — a plain background-color cannot win. Our
+ * inputs sit inside a padded rounded wrapper, so that tint covered only the
+ * inner input box and left the wrapper's white showing down both edges: a
+ * pale block floating inside the field.
+ *
+ * An inset shadow the height of the field repaints the surface white, which
+ * the UA rule does not override, and !important is required to beat the
+ * inline boxShadow react-native-web writes onto the element. The absurd
+ * transition delay is the companion trick for engines that animate the tint
+ * in rather than setting it outright — the animation never reaches a visible
+ * frame. text-fill-color carries the text colour, which the same UA rule
+ * would otherwise force to its own near-black.
+ */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+input:-webkit-autofill:active,
+textarea:-webkit-autofill,
+select:-webkit-autofill {
+  -webkit-box-shadow: 0 0 0 1000px #ffffff inset !important;
+  box-shadow: 0 0 0 1000px #ffffff inset !important;
+  -webkit-text-fill-color: #14323f !important;
+  caret-color: #14323f;
+  /* Follows the field's own corners instead of drawing square ones. */
+  border-radius: inherit;
+  transition: background-color 100000s ease-in-out 0s !important;
+}
+
+/* Firefox uses the standard selector and an ordinary background, so it takes
+   the straightforward fix. */
+input:autofill,
+textarea:autofill,
+select:autofill {
+  background-color: #ffffff !important;
+  color: #14323f !important;
+}

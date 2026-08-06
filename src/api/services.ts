@@ -20,7 +20,26 @@ export type AvailableSatellite = {
   service: string;
   moduleKey: SatelliteKey;
   label: string;
+  /** Where the satellite lives — used to warm it before the user clicks. */
+  baseUrl?: string;
 };
+
+/**
+ * Fires a best-effort ping at each satellite so its hosting spins the
+ * instance up while the tile is merely on screen. A cold satellite was most
+ * of the several seconds a launch spent on a blank tab; by the time the user
+ * actually taps, the instance is warm and the SSO handshake is quick. The
+ * response is ignored entirely — reachability is all that matters.
+ */
+const warmedHosts = new Set<string>();
+export function warmSatellites(rows: AvailableSatellite[] | undefined): void {
+  for (const row of rows ?? []) {
+    const base = resolveLaunchUrl(row.baseUrl?.trim() ?? '');
+    if (!base || warmedHosts.has(base)) continue;
+    warmedHosts.add(base);
+    fetch(base, { method: 'GET', cache: 'no-store' }).catch(() => undefined);
+  }
+}
 
 export const serviceKeys = {
   available: () => ['services', 'available'] as const,
