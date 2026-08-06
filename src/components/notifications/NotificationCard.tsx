@@ -42,7 +42,10 @@ export default function NotificationCard({
   // the same text.
   const [measuredLong, setMeasuredLong] = useState(false);
   const body = item.body ?? '';
-  const likelyLong = body.length > 78 || item.title.length > 34;
+  // Thresholds sized for the narrowest supported screens — text that clamps
+  // with no toggle is unreachable, while a needless "More" merely expands to
+  // the same message.
+  const likelyLong = body.length > 64 || item.title.length > 30;
   const canExpand = Boolean(body) && (measuredLong || likelyLong);
 
   return (
@@ -75,15 +78,46 @@ export default function NotificationCard({
         </Text>
 
         {body ? (
-          <Text
-            numberOfLines={expanded ? undefined : 2}
-            onTextLayout={(event) => {
-              if (event.nativeEvent.lines.length > 2) setMeasuredLong(true);
-            }}
-            className="mt-1 text-[13px] leading-[18px] text-slate-500"
-          >
-            {body}
-          </Text>
+          <View className="mt-1 flex-row items-end gap-2">
+            <Text
+              numberOfLines={expanded ? undefined : 2}
+              onTextLayout={(event) => {
+                if (event.nativeEvent.lines.length > 2) setMeasuredLong(true);
+              }}
+              // Tapping the message toggles too — the small label isn't the
+              // only target. Nested Press capture keeps the card's own
+              // navigation out of it.
+              onPress={canExpand ? () => setExpanded((v) => !v) : undefined}
+              className="min-w-0 flex-1 text-[13px] leading-[18px] text-slate-500"
+            >
+              {body}
+            </Text>
+
+            {/* Beside the text, not down in the meta row — it belongs to the
+                message it expands. */}
+            {canExpand ? (
+              <Pressable
+                onPress={() => setExpanded((value) => !value)}
+                hitSlop={10}
+                accessibilityRole="button"
+                accessibilityLabel={
+                  expanded
+                    ? 'Show less'
+                    : `Show the full message for ${item.title}`
+                }
+                className="shrink-0 flex-row items-center gap-0.5 rounded-full px-1 py-[2px] active:bg-slate-100"
+              >
+                <Text className="text-[10.5px] font-bold text-slate-500">
+                  {expanded ? 'Less' : 'More'}
+                </Text>
+                {expanded ? (
+                  <ChevronUp size={11} color="#64748B" />
+                ) : (
+                  <ChevronDown size={11} color="#64748B" />
+                )}
+              </Pressable>
+            ) : null}
+          </View>
         ) : null}
 
         {/* Meta line: when it happened and which module it came from, as
@@ -92,29 +126,6 @@ export default function NotificationCard({
           <Text className="text-[10.5px] font-semibold uppercase tracking-wider text-slate-400">
             {formatRelativeTime(item.createdAt)} · {descriptor.group}
           </Text>
-
-          {/* Nested Pressable: the touch is captured here, so expanding never
-              triggers the card's navigation. */}
-          {canExpand ? (
-            <Pressable
-              onPress={() => setExpanded((value) => !value)}
-              hitSlop={10}
-              accessibilityRole="button"
-              accessibilityLabel={
-                expanded ? 'Show less' : `Show the full message for ${item.title}`
-              }
-              className="flex-row items-center gap-0.5 rounded-full px-1 py-[2px] active:bg-slate-100"
-            >
-              <Text className="text-[10.5px] font-bold text-slate-500">
-                {expanded ? 'Less' : 'More'}
-              </Text>
-              {expanded ? (
-                <ChevronUp size={11} color="#64748B" />
-              ) : (
-                <ChevronDown size={11} color="#64748B" />
-              )}
-            </Pressable>
-          ) : null}
 
           <View className="flex-1" />
 

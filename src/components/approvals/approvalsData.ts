@@ -34,6 +34,10 @@ export type Approval = {
   stageNote: string;
   status: ApprovalStatus;
   overlaps: Overlap[];
+  /** The approval step lapsed past its window. Shown as a chip; the note
+   *  explains which step and why, without naming an actor. */
+  overdue?: boolean;
+  overdueNote?: string;
 };
 
 export const INITIAL_APPROVALS: Approval[] = [
@@ -252,6 +256,33 @@ function initialsOf(name: string): string {
   return (first + last).toUpperCase();
 }
 
+/** What approving does, named for the approver reading it. */
+function stageLabel(row: ServerApprovalRow): string {
+  if (row.autoApproved) return 'Auto-approved';
+  if (row.route === 'manager_then_hr') return 'HR step next';
+  if (row.route === 'policy_exception') return 'Policy exception';
+  return 'Manager approval';
+}
+
+/**
+ * Short label for the request — "Annual Leave", "Comp-off credit",
+ * "Milad-un-Nabi".
+ *
+ * NOT `summary`: that is already "Annual Leave · 2 days · 2026-07-24 to
+ * 2026-07-25", and the card appends its own "· N days · from to to", so using
+ * it printed every date and day count twice. The feed's own Type/Holiday meta
+ * chip is the short form. KIND_TITLE stays as the last resort for the kinds
+ * that publish neither.
+ */
+function shortTitle(row: ServerApprovalRow, kind: ServerApprovalKind): string {
+  return (
+    metaValue(row, 'type') ??
+    metaValue(row, 'holiday') ??
+    KIND_TITLE[kind] ??
+    'Request'
+  );
+}
+
 /**
  * Maps one server queue row onto the card model this screen renders. Dates and
  * day counts travel in the row's generic meta chips, so they are best-effort:
@@ -263,8 +294,16 @@ export function toApproval(
 ): Approval & { serverRow: ServerApprovalRow } {
   const kind = String(row.kind ?? '') as ServerApprovalKind;
   const name = row.requester?.name?.trim() || 'Employee';
-  const roleBits = [row.requester?.designation, row.requester?.team].filter(
-    Boolean,
+  // `team` and `department` are the same department name on the kinds that
+  // send both — dedupe, or the role line reads "Engineering · Engineering".
+  const roleBits = Array.from(
+    new Set(
+      [
+        row.requester?.designation,
+        row.requester?.team,
+        row.requester?.department,
+      ].filter(Boolean),
+    ),
   );
   const days = Number(metaValue(row, 'days') ?? metaValue(row, 'day count'));
 
@@ -275,19 +314,29 @@ export function toApproval(
     role: roleBits.join(' · '),
     employeeId: row.requester?.id ?? '',
     type: KIND_TO_TYPE[kind] ?? 'Other',
-    title: KIND_TITLE[kind] ?? row.summary ?? 'Request',
+    title: shortTitle(row, kind),
     from: metaValue(row, 'from') ?? metaValue(row, 'date') ?? '—',
     to: metaValue(row, 'to') ?? metaValue(row, 'date') ?? '—',
     days: Number.isFinite(days) ? days : 0,
     submitted: relativeLabel(row.raisedAt),
     reason: row.details || row.summary || '',
-    stage: row.autoApproved ? 'Auto-approved' : 'Manager approval',
+    stage: stageLabel(row),
+    // The server states what approving does per route and per kind ("Final
+    // approval step — approving completes this request", "…waiting on the
+    // next approver"). The old hardcoded line claimed the decision was final
+    // even when an HR step followed.
     stageNote: row.autoApproved
       ? 'Approved automatically by policy.'
       : row.decisionNote
         ? `Note: ${row.decisionNote}`
-        : 'Your decision completes this request.',
+        : (row.routeNote ?? 'Your decision completes this request.'),
     status,
+    overdue: Boolean(row.escalation?.at),
+    overdueNote: row.escalation?.at
+      ? `${row.escalation.stepLabel ?? 'This'} step · ${
+          row.escalation.reason ?? 'Pending beyond the approval window.'
+        }`
+      : undefined,
     // Cross-team overlap needs GET /requests/:id/team-overlap per row — not
     // fetched yet, so the coverage panel stays empty on live data.
     overlaps: [],

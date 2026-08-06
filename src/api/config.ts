@@ -24,6 +24,17 @@ function resolveApiBase(): string {
   const configured = process.env.EXPO_PUBLIC_API_BASE_URL;
   if (configured) return configured.replace(/\/+$/, '');
 
+  // The LAN fallback is a development convenience only. In a release build
+  // hostUri is undefined, so this used to resolve to http://localhost:4000 —
+  // every request failed quietly and the app just looked broken. Failing loud
+  // here turns a misconfigured build into a five-second diagnosis instead.
+  if (!__DEV__) {
+    throw new Error(
+      'EXPO_PUBLIC_API_BASE_URL is not set. Production builds must define it ' +
+        '(eas.json build profile env, or .env for web exports).',
+    );
+  }
+
   const host = devServerHost();
   return `http://${host ?? 'localhost'}:${DEV_API_PORT}`;
 }

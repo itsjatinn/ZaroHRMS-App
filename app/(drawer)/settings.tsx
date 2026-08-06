@@ -25,9 +25,23 @@ import { currentUser } from '../../src/data/currentUser';
 
 export default function Settings() {
   const insets = useSafeAreaInsets();
-  const { signOut } = useAuth();
+  const { signOut, user, isBackendSession } = useAuth();
   const [notifications, setNotifications] = useState(true);
   const [darkMode, setDarkMode] = useState(false);
+
+  // The signed-in employee, with the demo profile only for the offline demo
+  // session — this card was showing the sample identity to real users.
+  const name = (user?.name ?? currentUser.name).trim();
+  const subtitle = isBackendSession
+    ? user?.email ?? ''
+    : currentUser.employeeId;
+  const initials = name
+    .split(/\s+/)
+    .map((part) => part[0])
+    .filter(Boolean)
+    .slice(0, 2)
+    .join('')
+    .toUpperCase();
 
   const soon = (label: string) => Alert.alert(label, 'Coming soon.');
 
@@ -47,12 +61,20 @@ export default function Settings() {
       >
         {/* Profile */}
         <View style={cardShadow} className="flex-row items-center gap-4 rounded-[22px] border border-slate-100 bg-white p-5">
-          <View className="h-16 w-16 overflow-hidden rounded-2xl border-2 border-[#F5D14E]">
-            <Image source={{ uri: currentUser.avatar }} className="h-full w-full" />
+          <View className="h-16 w-16 items-center justify-center overflow-hidden rounded-2xl border-2 border-[#F5D14E] bg-slate-100">
+            {/* Initials for real sessions — the sample portrait would show a
+                stranger's face as this employee's photo. */}
+            {isBackendSession ? (
+              <Text className="text-xl font-bold text-slate-500">{initials}</Text>
+            ) : (
+              <Image source={{ uri: currentUser.avatar }} className="h-full w-full" />
+            )}
           </View>
           <View className="flex-1">
-            <Text className="text-lg font-bold text-ink">{currentUser.name}</Text>
-            <Text className="text-xs text-slate-400">{currentUser.employeeId}</Text>
+            <Text className="text-lg font-bold text-ink">{name}</Text>
+            {subtitle ? (
+              <Text className="text-xs text-slate-400">{subtitle}</Text>
+            ) : null}
           </View>
           <Pressable
             onPress={() => soon('Edit profile')}

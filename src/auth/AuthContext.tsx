@@ -33,6 +33,17 @@ const EMAIL_KEY = 'zaro.email';
 const ROLE_KEY = 'zaro.role';
 /** Signed-in user + tenant from the login response, for headers/profile. */
 const PROFILE_KEY = 'zaro.profile';
+/** When the session was created — restores are refused past SESSION_MAX_AGE. */
+const SIGNED_IN_AT_KEY = 'zaro.signedInAt';
+
+/**
+ * How long a persisted session stays valid without re-login. Matches the
+ * backend's 7-day refresh token: past this the refresh would be rejected
+ * anyway, so expiring locally turns a mid-use failure into a clean sign-in
+ * screen at launch. The org and remembered email survive, so the re-login is
+ * password-only.
+ */
+const SESSION_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 
 type Profile = { user: AuthUser | null; tenant: AuthTenant | null };
 
@@ -90,14 +101,52 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let active = true;
     (async () => {
       try {
-        const [savedSession, savedSlug, savedEmail, savedRole, savedProfile] =
+        const [
+          savedSession,
+          savedSlug,
+          savedEmail,
+          savedRole,
+          savedProfile,
+          savedSignedInAt,
+        ] = await Promise.all([
+          getItem(SESSION_KEY),
+          getItem(ORG_SLUG_KEY),
+          getItem(EMAIL_KEY),
+          getItem(ROLE_KEY),
+          getItem(PROFILE_KEY),
+          getItem(SIGNED_IN_AT_KEY),
+        ]);
+
+        // A session older than a week is not restored. Sessions saved before
+        // this key existed get stamped now rather than dropped.
+        const signedInAt = Number(savedSignedInAt);
+        const expired =
+          savedSession != null &&
+          Number.isFinite(signedInAt) &&
+          Date.now() - signedInAt > SESSION_MAX_AGE_MS;
+        if (savedSession != null && !savedSignedInAt) {
+          await setItem(SIGNED_IN_AT_KEY, String(Date.now())).catch(
+            () => undefined,
+          );
+        }
+        if (expired) {
+          // Local clean-up only — no server round trip on the launch path.
+          // The org slug and remembered email deliberately survive.
+          await setAccessToken(null);
+          await setTenantSlug(null);
           await Promise.all([
-            getItem(SESSION_KEY),
-            getItem(ORG_SLUG_KEY),
-            getItem(EMAIL_KEY),
-            getItem(ROLE_KEY),
-            getItem(PROFILE_KEY),
-          ]);
+            removeItem(SESSION_KEY),
+            removeItem(ROLE_KEY),
+            removeItem(PROFILE_KEY),
+            removeItem(SIGNED_IN_AT_KEY),
+          ]).catch(() => undefined);
+          if (active) {
+            setOrgSlug(savedSlug);
+            setRememberedEmail(savedEmail);
+          }
+          return;
+        }
+
         // Hand the API client its bearer token — and the tenant slug its
         // silent refresh has to quote — before any screen renders.
         await Promise.all([restoreAccessToken(), restoreTenantSlug()]);
@@ -147,6 +196,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await setItem(SESSION_KEY, token);
         await setItem(ROLE_KEY, role);
         await setItem(PROFILE_KEY, JSON.stringify(nextProfile));
+        // Starts the 7-day window a restore is honoured within.
+        await setItem(SIGNED_IN_AT_KEY, String(Date.now()));
         // Remember the org so the workspace resolves next time.
         if (slug) await setItem(ORG_SLUG_KEY, slug);
         // Remember or forget the email based on the "Remember me" choice.
@@ -184,6 +235,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         removeItem(SESSION_KEY),
         removeItem(ROLE_KEY),
         removeItem(PROFILE_KEY),
+        removeItem(SIGNED_IN_AT_KEY),
         clearProfilePopupLatch(),
       ]);
     } catch {

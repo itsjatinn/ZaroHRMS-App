@@ -133,7 +133,8 @@ export default function SignInScreen() {
       if (brand.slug) setOrg(brand.slug);
     } catch (error) {
       const notFound = error instanceof ApiError && error.status === 401;
-      if (notFound && !isDemoOrganization(slug)) {
+      // The demo-org bypass only matters where the demo login itself works.
+      if (notFound && !(__DEV__ && isDemoOrganization(slug))) {
         // Open the field alongside the error — a returning user arrives here
         // with the collapsed summary row, which has nowhere to show it.
         setEditingOrg(true);
@@ -195,12 +196,14 @@ export default function SignInScreen() {
         tenant: result.tenant,
       });
     } catch (error) {
-      // Demo escape hatch: whenever the backend can't sign this user in —
-      // whether it's unreachable (NetworkError) or rejects the login
-      // (ApiError, e.g. the demo account doesn't exist in the DB) — the
-      // hardcoded demo credentials still open the app with mock data so the
-      // build stays demoable. Remove this whole block once real accounts exist.
-      const demoRole = authenticateDemoLogin(organization, email, password);
+      // Demo escape hatch, DEV BUILDS ONLY: when the backend can't sign this
+      // user in, the hardcoded demo credentials still open the app with mock
+      // data so local development stays demoable. Gated on __DEV__ so a
+      // shipped build can never be opened with the well-known demo password —
+      // ungated, these credentials were a working backdoor in production.
+      const demoRole = __DEV__
+        ? authenticateDemoLogin(organization, email, password)
+        : null;
       if (demoRole) {
         await signIn(undefined, {
           orgSlug: organization,

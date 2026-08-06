@@ -26,6 +26,7 @@ import {
   useWorkRequestPolicy,
 } from '../../src/api/leave';
 import {
+  MAX_ATTACHMENT_BYTES,
   requestErrorMessage,
   uploadRequestAttachment,
   useSubmitRequest,
@@ -240,6 +241,15 @@ export default function WorkFromHome() {
 
       if (!result.canceled && result.assets.length > 0) {
         const asset = result.assets[0];
+        // Fail here, not after a long doomed upload — the server caps
+        // attachments at 10 MB.
+        if ((asset.size ?? 0) > MAX_ATTACHMENT_BYTES) {
+          Alert.alert(
+            'File too large',
+            'Attachments can be up to 10 MB. Please choose a smaller file.',
+          );
+          return;
+        }
         setAttachment({
           name: asset.name,
           uri: asset.uri,
@@ -548,7 +558,7 @@ export default function WorkFromHome() {
 
           <View className={isWide ? 'mt-6 flex-row items-end gap-5' : 'mt-6 gap-5'}>
             <View className="flex-1">
-              <FieldLabel>Attachment</FieldLabel>
+              <FieldLabel required={isWorkAttachmentRequired(policy, applicationLabel, daysSelected)}>Attachment</FieldLabel>
               <AttachmentField fileName={attachment?.name ?? null} onPress={pickFile} />
             </View>
 

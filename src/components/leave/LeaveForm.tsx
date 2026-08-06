@@ -43,6 +43,8 @@ type LeaveFormProps = {
   onReason: (text: string) => void;
   onReasonFocus?: (target: number | null) => void;
   attachment: { name: string } | null;
+  /** Marks the attachment label with the required asterisk, like the web form. */
+  attachmentRequired?: boolean;
   onPickFile: () => void;
   attempted: boolean; // user pressed Apply at least once
   daysSelected: number;
@@ -111,6 +113,7 @@ export default function LeaveForm({
   onReason,
   onReasonFocus,
   attachment,
+  attachmentRequired = false,
   onPickFile,
   attempted,
   daysSelected,
@@ -260,7 +263,7 @@ export default function LeaveForm({
 
       {/* Attachment */}
       <View className="mt-4">
-        <FieldLabel>Attachment</FieldLabel>
+        <FieldLabel required={attachmentRequired}>Attachment</FieldLabel>
         <AttachmentField
           fileName={attachment?.name ?? null}
           onPress={onPickFile}

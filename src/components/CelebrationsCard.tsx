@@ -9,7 +9,7 @@ export default function CelebrationsCard() {
           <MaterialCommunityIcons name="cake-variant" size={20} color="#16202E" />
         </View>
         <View className="flex-1">
-          <Text className="text-sm font-semibold text-ink">Rohit's birthday</Text>
+          <Text className="text-sm font-semibold text-ink">Rohit&apos;s birthday</Text>
           <Text className="text-xs text-slate-500">Today · send a note</Text>
         </View>
       </View>

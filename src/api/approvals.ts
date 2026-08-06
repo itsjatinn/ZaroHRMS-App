@@ -1,4 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useFocusEffect } from 'expo-router';
+import { useCallback, useRef } from 'react';
 
 import { api } from './client';
 
@@ -29,7 +31,11 @@ export type ServerApprovalRow = {
     id?: string;
     name?: string;
     designation?: string;
+    /** Both carry the employee's department. The leave family sends only
+     *  `department`; comp-off / overtime / optional-holiday send both, with
+     *  the same value — so they must be deduped, never concatenated. */
     team?: string;
+    department?: string;
   };
   summary?: string;
   details?: string;
@@ -38,6 +44,18 @@ export type ServerApprovalRow = {
   decisionNote?: string;
   autoApproved?: boolean;
   meta?: { label: string; value: string }[];
+  /** What approving actually does. The feed has always sent these; the app
+   *  ignored them and asserted "Your decision completes this request." on
+   *  every row, including ones that still need an HR step after yours. */
+  route?: 'manager_final' | 'manager_then_hr' | 'policy_exception';
+  routeNote?: string;
+  /** Set when the step lapsed past the tenant's escalation window. Nobody
+   *  performs the escalation — this names the step, not an actor. */
+  escalation?: {
+    stepLabel?: string;
+    at?: string;
+    reason?: string;
+  };
 };
 
 export const approvalKeys = {
@@ -46,7 +64,7 @@ export const approvalKeys = {
 
 /** All three slices at once, so the status tabs carry real counts. */
 export function useManagerApprovals(enabled = true) {
-  return useQuery({
+  const query = useQuery({
     queryKey: approvalKeys.manager(),
     queryFn: ({ signal }) =>
       api.get<{
@@ -57,6 +75,25 @@ export function useManagerApprovals(enabled = true) {
     staleTime: 30_000,
     enabled,
   });
+
+  // Tab screens stay mounted, so without this a request the employee
+  // withdrew while the manager was on another tab kept showing as pending
+  // until the app was backgrounded. The server already drops withdrawn rows;
+  // this just asks it again whenever the queue comes back on screen.
+  const { refetch } = query;
+  const firstFocus = useRef(true);
+  useFocusEffect(
+    useCallback(() => {
+      // Mount already fetches; only re-focus needs the extra ask.
+      if (firstFocus.current) {
+        firstFocus.current = false;
+        return;
+      }
+      if (enabled) void refetch();
+    }, [enabled, refetch]),
+  );
+
+  return query;
 }
 
 /**

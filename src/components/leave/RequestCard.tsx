@@ -16,6 +16,14 @@ import DocumentPreview, {
 } from '../profile/DocumentPreview';
 import { cardShadow } from '../shadow';
 
+// Web-only: an unbroken string (no spaces) never wraps on its own there, so it
+// forces the text column wider than the card and shoves the More/Less toggle
+// off the edge. Native wraps anywhere by default and needs nothing.
+const BREAK_LONG_WORDS =
+  Platform.OS === 'web'
+    ? ({ wordBreak: 'break-word' } as unknown as import('react-native').TextStyle)
+    : null;
+
 /**
  * The full set the HRMS tracks. Cancellation is its own small workflow: an
  * employee asks, HR decides, and the request ends up cancelled or with the
@@ -112,6 +120,8 @@ export default function RequestCard({
   requestId,
 }: RequestCardProps) {
   const [reasonOpen, setReasonOpen] = useState(false);
+  /** Long reasons collapse to one line behind a More toggle. */
+  const [reasonExpanded, setReasonExpanded] = useState(false);
   /** Index of the attachment currently downloading, so only its button spins. */
   const [openingIndex, setOpeningIndex] = useState<number | null>(null);
   /** The file being shown in the in-app preview card, once it is on disk. */
@@ -201,20 +211,45 @@ export default function RequestCard({
                 <Text className="w-20 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
                   Reason
                 </Text>
-                <Text className="flex-1 text-xs text-ink" numberOfLines={3}>
-                  {reason}
-                </Text>
+                <View className="min-w-0 flex-1 flex-row items-start gap-2">
+                  {/* One line by default — a long reason was swallowing the
+                      whole card. "More" reveals the rest in place, and the
+                      text itself toggles too, so collapsing never depends on
+                      hitting the small label. */}
+                  <Text
+                    className="min-w-0 flex-1 text-xs leading-5 text-ink"
+                    style={BREAK_LONG_WORDS}
+                    numberOfLines={reasonExpanded ? undefined : 1}
+                    onPress={
+                      reason.length > 40
+                        ? () => setReasonExpanded((v) => !v)
+                        : undefined
+                    }
+                  >
+                    {reason}
+                  </Text>
+                  {reason.length > 40 ? (
+                    <Pressable
+                      onPress={() => setReasonExpanded((v) => !v)}
+                      hitSlop={8}
+                      accessibilityRole="button"
+                      className="shrink-0"
+                    >
+                      <Text className="text-[11px] font-bold leading-5 text-slate-400">
+                        {reasonExpanded ? 'Less' : 'More'}
+                      </Text>
+                    </Pressable>
+                  ) : null}
+                </View>
               </View>
             ) : null}
-            {appliedOn || actionDate || attachments?.length ? (
-              // Wraps rather than squashing: with a decision date present this
-              // row already carries Applied + Actioned, and Attached is a
-              // third item that would otherwise crush the dates on a narrow
-              // phone.
+            {appliedOn || actionDate || cancellable ? (
+              // Applied (and Actioned, once a decision exists) on the left,
+              // with the card's action where the attachment chip used to sit.
               <View className="flex-row flex-wrap items-center gap-x-3 gap-y-2">
                 {appliedOn ? (
-                  <View className="flex-1 flex-row gap-2">
-                    <Text className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                  <View className="flex-row gap-2">
+                    <Text className="w-20 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
                       Applied
                     </Text>
                     <Text className="text-xs font-medium text-ink">
@@ -225,7 +260,7 @@ export default function RequestCard({
                 {/* Only once a decision exists — a dash on every pending
                     request was noise, not information. */}
                 {actionDate ? (
-                  <View className="flex-1 flex-row gap-2">
+                  <View className="flex-row gap-2">
                     <Text className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
                       Actioned
                     </Text>
@@ -234,57 +269,69 @@ export default function RequestCard({
                     </Text>
                   </View>
                 ) : null}
-                {/* Sits to the right of Applied, on the same line. Shown for
-                    every status, not just approved: the employee needs to
-                    check what they sent while it is still pending, and to
-                    re-read it after a rejection. */}
-                {attachments?.length ? (
-                  <View className="shrink-0 flex-row items-center gap-2">
-                    <Text className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-                      Attachment
+                {cancellable ? (
+                  <Pressable
+                    onPress={onCancel}
+                    hitSlop={8}
+                    className="ml-auto flex-row items-center gap-1.5 active:opacity-60"
+                  >
+                    <X size={14} color="#EF4444" strokeWidth={2.5} />
+                    <Text className="text-[13px] font-bold text-red-500">
+                      {cancelLabel}
                     </Text>
-                    {attachments.map((file, index) => {
-                      const busy = openingIndex === index;
-                      return (
-                        <Pressable
-                          // Name alone is not unique — the same file can be
-                          // attached twice — and the list never reorders, so
-                          // the index is stable.
-                          key={`${index}-${file.name}`}
-                          disabled={!canOpenAttachments || openingIndex !== null}
-                          onPress={() => openAttachment(index, file.name)}
-                          hitSlop={6}
-                          accessibilityRole={canOpenAttachments ? 'button' : 'text'}
-                          accessibilityLabel={
-                            canOpenAttachments ? `View ${file.name}` : file.name
-                          }
-                          className={`flex-row items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 ${
-                            canOpenAttachments ? 'active:opacity-70' : ''
-                          }`}
-                        >
-                          <Paperclip size={12} color="#64748B" strokeWidth={2} />
-                          {busy ? (
-                            <ActivityIndicator size="small" color="#14323F" />
-                          ) : (
-                            <Text className="text-[11px] font-bold text-ink">
-                              {/* Numbered only when there is more than one, so
-                                  the buttons stay tellable apart. */}
-                              {canOpenAttachments ? 'View' : 'File'}
-                              {attachments.length > 1 ? ` ${index + 1}` : ''}
-                            </Text>
-                          )}
-                        </Pressable>
-                      );
-                    })}
-                  </View>
+                  </Pressable>
                 ) : null}
+              </View>
+            ) : null}
+            {/* Below the applied row. Shown for every status, not just
+                approved: the employee needs to check what they sent while it
+                is still pending, and to re-read it after a rejection. */}
+            {attachments?.length ? (
+              <View className="flex-row flex-wrap items-center gap-2">
+                <Text className="w-20 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                  Attachment
+                </Text>
+                {attachments.map((file, index) => {
+                  const busy = openingIndex === index;
+                  return (
+                    <Pressable
+                      // Name alone is not unique — the same file can be
+                      // attached twice — and the list never reorders, so
+                      // the index is stable.
+                      key={`${index}-${file.name}`}
+                      disabled={!canOpenAttachments || openingIndex !== null}
+                      onPress={() => openAttachment(index, file.name)}
+                      hitSlop={6}
+                      accessibilityRole={canOpenAttachments ? 'button' : 'text'}
+                      accessibilityLabel={
+                        canOpenAttachments ? `View ${file.name}` : file.name
+                      }
+                      className={`flex-row items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 ${
+                        canOpenAttachments ? 'active:opacity-70' : ''
+                      }`}
+                    >
+                      <Paperclip size={12} color="#64748B" strokeWidth={2} />
+                      {busy ? (
+                        <ActivityIndicator size="small" color="#14323F" />
+                      ) : (
+                        <Text className="text-[11px] font-bold text-ink">
+                          {/* Numbered only when there is more than one, so
+                              the buttons stay tellable apart. */}
+                          {canOpenAttachments ? 'View' : 'File'}
+                          {attachments.length > 1 ? ` ${index + 1}` : ''}
+                        </Text>
+                      )}
+                    </Pressable>
+                  );
+                })}
               </View>
             ) : null}
           </View>
         </>
       ) : null}
 
-      {cancellable ? (
+      {/* Cards with no detail rows still need somewhere for the action. */}
+      {cancellable && !(reason || appliedOn || actionDate || attachments?.length) ? (
         <>
           <View className="mt-3 border-t border-slate-100" />
           <View className="mt-3 flex-row justify-end">

@@ -1,9 +1,10 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Eye, EyeOff } from 'lucide-react-native';
 import { useState } from 'react';
-import { Alert, Platform, Pressable, Text, View } from 'react-native';
+import { Platform, Pressable, Text, View } from 'react-native';
 
 import { resetPassword } from '../../src/api/auth';
+import { Alert } from '../../src/components/CrossAlert';
 import { NetworkError } from '../../src/api/client';
 import AuthButton from '../../src/components/auth/AuthButton';
 import AuthField from '../../src/components/auth/AuthField';

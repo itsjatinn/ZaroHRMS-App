@@ -109,6 +109,12 @@ type RequestOptions = {
    * 401 calls back into signOut, which calls logout again, and so on.
    */
   noAuthRetry?: boolean;
+  /**
+   * Overrides the default 20s abort for requests that legitimately run long —
+   * a multi-megabyte attachment upload on a mobile uplink needs minutes, and
+   * killing it at 20s surfaced as "submitting hangs, then fails".
+   */
+  timeoutMs?: number;
 };
 
 async function readError(response: Response) {
@@ -127,13 +133,24 @@ async function readError(response: Response) {
 // The refresh token is an HttpOnly cookie the backend set at login (path
 // /api/auth); React Native's native cookie jar replays it for us. One refresh
 // runs at a time so a burst of 401s doesn't rotate the token repeatedly.
-let refreshInFlight: Promise<string | null> | null = null;
+type RefreshResult = {
+  token: string | null;
+  /**
+   * True only when the server definitively rejected the refresh (the session
+   * is gone). A timeout or offline launch is NOT the end of the session —
+   * signing the user out on those made every flaky app open a forced
+   * re-login, which is exactly the "have to log in every time" complaint.
+   */
+  sessionEnded: boolean;
+};
 
-async function refreshAccessToken(): Promise<string | null> {
+let refreshInFlight: Promise<RefreshResult> | null = null;
+
+async function refreshAccessToken(): Promise<RefreshResult> {
   // Without a slug the request is a guaranteed 400, so don't spend a round
   // trip (and the caller's 20s timeout) to be told so.
-  if (!tenantSlug) return null;
-  refreshInFlight ??= (async () => {
+  if (!tenantSlug) return { token: null, sessionEnded: true };
+  refreshInFlight ??= (async (): Promise<RefreshResult> => {
     // Own timeout rather than the caller's signal: this promise is shared, so
     // one caller aborting must not cancel the refresh for everyone else. Without
     // a timeout an unreachable host stalls the refresh — and its caller — for as
@@ -159,13 +176,22 @@ async function refreshAccessToken(): Promise<string | null> {
         // 15-minute access-token expiry.
         credentials: 'include',
       });
-      if (!response.ok) return null;
+      if (!response.ok) {
+        // 401/403 = the refresh token itself was rejected — session over.
+        // Anything else (500, 502, gateway hiccup) is the server's problem
+        // and must not cost the user their session.
+        return {
+          token: null,
+          sessionEnded: response.status === 401 || response.status === 403,
+        };
+      }
       const body = (await response.json()) as { accessToken?: string };
-      if (!body.accessToken) return null;
+      if (!body.accessToken) return { token: null, sessionEnded: true };
       await setAccessToken(body.accessToken);
-      return body.accessToken;
+      return { token: body.accessToken, sessionEnded: false };
     } catch {
-      return null;
+      // Timeout or no connectivity — transient by definition.
+      return { token: null, sessionEnded: false };
     } finally {
       clearTimeout(timer);
       // Cleared on the next tick so concurrent callers share this result.
@@ -210,7 +236,10 @@ export async function apiRequest<T>(
 ): Promise<T> {
   const url = `${API_URL}${path}`;
   const timeout = new AbortController();
-  const timer = setTimeout(() => timeout.abort(), REQUEST_TIMEOUT);
+  const timer = setTimeout(
+    () => timeout.abort(),
+    options.timeoutMs ?? REQUEST_TIMEOUT,
+  );
   // Caller aborts (react-query cancellation) have to cancel the fetch too.
   const abortFromCaller = () => timeout.abort();
   options.signal?.addEventListener('abort', abortFromCaller);
@@ -232,16 +261,18 @@ export async function apiRequest<T>(
     }
 
     if (response.status === 401 && !options.anonymous && !options.noAuthRetry) {
-      const refreshed = await refreshAccessToken();
-      if (refreshed) {
+      const refresh = await refreshAccessToken();
+      if (refresh.token) {
         response = await fetch(url, {
-          ...buildInit(options, refreshed),
+          ...buildInit(options, refresh.token),
           signal: timeout.signal,
         });
-      } else {
+      } else if (refresh.sessionEnded) {
         await setAccessToken(null);
         onUnauthorized?.();
       }
+      // Transient refresh failure: the original 401 falls through as this
+      // request's error, but the session survives for the next attempt.
     }
 
     if (!response.ok) throw await readError(response);

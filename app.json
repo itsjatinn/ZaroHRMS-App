@@ -10,7 +10,10 @@
     "newArchEnabled": true,
     "ios": {
       "bundleIdentifier": "com.zarohr.app",
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "package": "com.zarohr.app",
@@ -70,6 +73,12 @@
         {
           "photosPermission": "ZaroHR needs access to your photos to update your profile picture.",
           "cameraPermission": "ZaroHR needs access to your camera to take a new profile picture."
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "ZaroHR uses your location to record where you punch in and out."
         }
       ],
       "expo-router",

@@ -1,7 +1,8 @@
+import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
 import * as ImagePicker from 'expo-image-picker';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Keyboard, ScrollView, View } from 'react-native';
+import { Keyboard, Platform, ScrollView, View } from 'react-native';
 import { Alert } from '../../src/components/CrossAlert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -36,6 +37,7 @@ import RequestSuccessModal, {
   type SuccessDetail,
 } from '../../src/components/requests/RequestSuccessModal';
 import {
+  MAX_ATTACHMENT_BYTES,
   requestErrorMessage,
   uploadRequestAttachment,
   useSubmitRequest,
@@ -316,19 +318,43 @@ export default function LeaveApplicationScreen() {
   const pickFile = async () => {
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images', 'videos'],
-        quality: 1,
+        // Images only: the upload endpoint rejects video outright, so offering
+        // it meant a long upload that could only end in a server error.
+        mediaTypes: ['images'],
+        quality: 0.8,
       });
       if (!result.canceled && result.assets.length > 0) {
         const asset = result.assets[0];
-        const name =
-          asset.fileName ?? asset.uri.split('/').pop() ?? 'attachment';
-        setAttachment({
-          name,
-          uri: asset.uri,
-          mimeType: asset.mimeType,
-          file: asset.file,
-        });
+        let { uri, mimeType } = asset;
+        let name = asset.fileName ?? asset.uri.split('/').pop() ?? 'attachment';
+
+        // A full-resolution phone photo is many megabytes and was uploaded
+        // as-is, which is what made submissions crawl on mobile data. A proof
+        // document stays perfectly readable at 2000px, and re-encoding cuts
+        // the upload to a few hundred KB. Native only: on web the picked File
+        // is uploaded directly and users pick prepared files there.
+        if (Platform.OS !== 'web' && (asset.width ?? 0) > 2000) {
+          const resized = await manipulateAsync(
+            asset.uri,
+            [{ resize: { width: 2000 } }],
+            { compress: 0.8, format: SaveFormat.JPEG },
+          );
+          uri = resized.uri;
+          mimeType = 'image/jpeg';
+          name = name.replace(/\.[^.]+$/, '') + '.jpg';
+        }
+
+        const size =
+          Platform.OS === 'web' ? asset.file?.size : asset.fileSize;
+        if (uri === asset.uri && (size ?? 0) > MAX_ATTACHMENT_BYTES) {
+          Alert.alert(
+            'File too large',
+            'Attachments can be up to 10 MB. Please choose a smaller file.',
+          );
+          return;
+        }
+
+        setAttachment({ name, uri, mimeType, file: asset.file });
       }
     } catch {
       Alert.alert('Could not open the file picker.');
@@ -438,6 +464,7 @@ export default function LeaveApplicationScreen() {
       onReason={setReason}
       onReasonFocus={handleReasonFocus}
       attachment={attachment}
+      attachmentRequired={evaluation.attachmentRequired}
       onPickFile={pickFile}
       attempted={attempted}
       daysSelected={daysSelected}

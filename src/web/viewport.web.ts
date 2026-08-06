@@ -31,7 +31,14 @@ export function lockViewportToDesignWidth(): void {
   if (!meta) return;
 
   /**
-   * Width actually available to the page.
+   * Width actually available to the page, in device-width CSS pixels.
+   *
+   * Once the viewport is pinned, innerWidth reports DESIGN_WIDTH — feeding it
+   * back in would drift on every re-measure. visualViewport sidesteps that:
+   * `width × scale` is the window's physical CSS width regardless of what the
+   * meta currently says, and the product is also invariant under pinch-zoom
+   * (zooming shrinks width and raises scale in exact proportion), so a zoomed
+   * page never triggers a bogus re-pin.
    *
    * screen.width alone is the whole display, and the page does not always own
    * it: split-screen, an in-app/WebView browser, a resized desktop window and
@@ -39,13 +46,12 @@ export function lockViewportToDesignWidth(): void {
    * the display then makes it wider than the window — and because global.css
    * sets `overflow-x: hidden`, the excess is clipped outright rather than
    * panned, which is the UI "cropping" this is meant to prevent.
-   *
-   * innerWidth alone is no good either: once the viewport is pinned below it
-   * reports DESIGN_WIDTH, so feeding it back in would drift on every
-   * re-measure. Hence the narrower of the two, measured only while the
-   * viewport is unpinned (see measureThenApply).
    */
   const availableWidth = () => {
+    const visual = window.visualViewport;
+    if (visual?.width && visual.scale) {
+      return Math.round(visual.width * visual.scale);
+    }
     const screenWidth = window.screen?.width || 0;
     const windowWidth = window.innerWidth || 0;
     if (!screenWidth) return windowWidth || DESIGN_WIDTH;
@@ -56,42 +62,39 @@ export function lockViewportToDesignWidth(): void {
   const apply = () => {
     const deviceWidth = availableWidth();
 
-    if (deviceWidth >= PHONE_MAX) {
-      meta.setAttribute('content', DEVICE_WIDTH_VIEWPORT);
-      return;
+    const content =
+      deviceWidth >= PHONE_MAX
+        ? DEVICE_WIDTH_VIEWPORT
+        : // The fit scale must be spelled out. `width=390` alone leaves
+          // initial-scale up to the browser, and Android Chrome then renders
+          // the 390px layout at 1:1 inside a narrower window — the page looks
+          // ~8% zoomed-in, the spare 30px pans as horizontal scroll, and
+          // opening the drawer in that state lets the whole page wander.
+          // Pinning initial-scale (and minimum-scale, so the page cannot be
+          // left stuck zoomed out) makes the layout exactly fill the screen.
+          // Zooming IN stays available — maximum-scale is deliberately not
+          // set, for accessibility.
+          `width=${DESIGN_WIDTH}, initial-scale=${(deviceWidth / DESIGN_WIDTH).toFixed(4)}, minimum-scale=${(deviceWidth / DESIGN_WIDTH).toFixed(4)}, shrink-to-fit=no`;
+
+    // Only write on change. Writing the meta fires a resize event of its own;
+    // skipping identical writes is what stops that echo from looping — the
+    // echoed resize re-measures, computes the same content, and goes quiet.
+    if (meta.getAttribute('content') !== content) {
+      meta.setAttribute('content', content);
     }
-
-    // The fit scale must be spelled out. `width=390` alone leaves
-    // initial-scale up to the browser, and Android Chrome then renders the
-    // 390px layout at 1:1 inside a narrower window — the page looks ~8%
-    // zoomed-in, the spare 30px pans as horizontal scroll, and opening the
-    // drawer in that state lets the whole page wander. Pinning initial-scale
-    // (and minimum-scale, so the page cannot be left stuck zoomed out) makes
-    // the layout exactly fill the screen. Zooming IN stays available —
-    // maximum-scale is deliberately not set, for accessibility.
-    const scale = (deviceWidth / DESIGN_WIDTH).toFixed(4);
-    meta.setAttribute(
-      'content',
-      `width=${DESIGN_WIDTH}, initial-scale=${scale}, minimum-scale=${scale}, shrink-to-fit=no`,
-    );
-  };
-
-  /**
-   * Re-measure with the viewport unpinned, so innerWidth reports the real
-   * window instead of the DESIGN_WIDTH we ourselves put there. The first call
-   * can measure directly — +html.tsx ships `width=device-width`, so nothing
-   * has pinned it yet.
-   */
-  const measureThenApply = () => {
-    meta.setAttribute('content', DEVICE_WIDTH_VIEWPORT);
-    // A frame, so the browser applies the reset before innerWidth is read.
-    window.requestAnimationFrame(apply);
   };
 
   apply();
-  // Portrait and landscape have different device widths, so a phone rotated
-  // into landscape can cross PHONE_MAX and should get its real viewport back.
-  window.addEventListener('orientationchange', measureThenApply);
-  // Deliberately NOT listening to `resize`: setting the meta above itself
-  // fires one, so re-measuring on it would drive a reset/apply loop.
+  // The available width is not fixed at load: rotation, split-screen,
+  // foldables, desktop window resizes and keyboards all change it after the
+  // fact. A stale minimum-scale from a wider window kept the 390px layout
+  // wider than the screen, and overflow-x:hidden cropped every page on the
+  // right. Debounced so mid-drag resize floods settle into one re-pin.
+  let settle: ReturnType<typeof setTimeout> | undefined;
+  const reapply = () => {
+    if (settle) clearTimeout(settle);
+    settle = setTimeout(apply, 120);
+  };
+  window.addEventListener('resize', reapply);
+  window.addEventListener('orientationchange', reapply);
 }

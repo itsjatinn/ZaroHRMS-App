@@ -3,7 +3,7 @@ import { useDrawerProgress } from '@react-navigation/drawer';
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { Tabs } from 'expo-router';
 import type { ReactNode } from 'react';
-import { Pressable, Text, useWindowDimensions, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 import Animated, {
   interpolate,
   useAnimatedStyle,
@@ -66,34 +66,41 @@ function AnimatedScene({ children }: { children: ReactNode }) {
  */
 function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
   const insets = useSafeAreaInsets();
-  const { width } = useWindowDimensions();
   const horizontalMargin = state.routes.length > 3 ? 12 : 28;
-  const barWidth = Math.min(
-    width - horizontalMargin * 2,
-    state.routes.length * MAX_TAB_SLOT_WIDTH + 28,
-  );
-  const tabSlotWidth = (barWidth - 16) / state.routes.length;
 
+  // Centered by flexbox, not by a JS `left = (width - barWidth) / 2` — window
+  // width from useWindowDimensions can lag the real viewport on web (the
+  // design-width pin rescales it after load), which parked the bar off-center
+  // on some devices. An edge-anchored wrapper needs no width to be exact.
   return (
     <View
+      pointerEvents="box-none"
       style={{
         position: 'absolute',
-        left: (width - barWidth) / 2,
+        left: horizontalMargin,
+        right: horizontalMargin,
         bottom: insets.bottom + 18,
-        width: barWidth,
-        height: BAR_HEIGHT,
-        flexDirection: 'row',
         alignItems: 'center',
-        justifyContent: 'space-evenly',
-        backgroundColor: '#14323F',
-        borderRadius: 26,
-        shadowColor: '#0B1F27',
-        shadowOffset: { width: 0, height: 8 },
-        shadowOpacity: 0.22,
-        shadowRadius: 18,
-        elevation: 12,
       }}
     >
+      <View
+        style={{
+          width: '100%',
+          maxWidth: state.routes.length * MAX_TAB_SLOT_WIDTH + 28,
+          height: BAR_HEIGHT,
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'space-evenly',
+          paddingHorizontal: 8,
+          backgroundColor: '#14323F',
+          borderRadius: 26,
+          shadowColor: '#0B1F27',
+          shadowOffset: { width: 0, height: 8 },
+          shadowOpacity: 0.22,
+          shadowRadius: 18,
+          elevation: 12,
+        }}
+      >
       {state.routes.map((route, index) => {
         const { options } = descriptors[route.key];
         const label = (options.title ?? route.name) as string;
@@ -118,7 +125,7 @@ function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
             accessibilityRole="button"
             accessibilityState={focused ? { selected: true } : {}}
             style={{
-              width: tabSlotWidth,
+              flex: 1,
               height: '100%',
               alignItems: 'center',
               justifyContent: 'center',
@@ -155,6 +162,7 @@ function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
           </Pressable>
         );
       })}
+      </View>
     </View>
   );
 }

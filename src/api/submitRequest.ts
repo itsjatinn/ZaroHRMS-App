@@ -45,6 +45,9 @@ export type SubmitRequestBody = {
   attachment?: StoredAttachment;
 };
 
+/** The server's hard cap (multer fileSize limit on POST /requests/attachments). */
+export const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
+
 /** Uploads a picked file and returns the descriptor the request body expects. */
 export async function uploadRequestAttachment(file: {
   uri: string;
@@ -71,7 +74,11 @@ export async function uploadRequestAttachment(file: {
       type: file.mimeType || 'application/octet-stream',
     } as unknown as Blob);
   }
-  return api.post<StoredAttachment>('/requests/attachments', form);
+  // Uploads are the slow leg of a submit on mobile data — give them time
+  // instead of the client's default 20s abort.
+  return api.post<StoredAttachment>('/requests/attachments', form, {
+    timeoutMs: 120_000,
+  });
 }
 
 /** Turns a failed request into the server's own wording where there is one. */

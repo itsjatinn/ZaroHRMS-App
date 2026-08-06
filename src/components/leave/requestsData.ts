@@ -61,6 +61,10 @@ export const REQUESTS: Request[] = [
     month: 'July 2026',
     status: 'Pending',
     icon: Activity,
+    // Long on purpose: shows the one-line reason + "More" toggle in the demo.
+    reason:
+      'Came down with a viral fever overnight; the doctor has advised a full day of rest and a follow-up if the temperature does not settle.',
+    appliedOn: '27 Jul 2026',
   },
   {
     id: '4',

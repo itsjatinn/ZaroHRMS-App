@@ -24,13 +24,15 @@ function getGreeting() {
 
 const DURATION = 320;
 const EASING = Easing.inOut(Easing.cubic);
+// Web-only CSS that react-native-web honours at runtime; RN's TextStyle type
+// doesn't know these values, hence the cast.
 const WEB_INPUT_RESET =
   Platform.OS === 'web'
     ? ({
         outlineStyle: 'none',
         outlineWidth: 0,
         boxShadow: 'none',
-      } as const)
+      } as unknown as import('react-native').TextStyle)
     : null;
 
 export default function Header() {
